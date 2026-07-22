@@ -19,6 +19,10 @@
         <!-- Header -->
         <header id="header" class="header" role="banner">
             <div class="header-left">
+                <button id="mobileWatchlistBtn" class="mobile-watchlist-btn" title="Buka Watchlist" aria-label="Buka Watchlist">
+                    <span class="mobile-btn-icon">📋</span>
+                    <span class="mobile-btn-text">Watchlist</span>
+                </button>
                 <div class="logo">
                     <span class="logo-icon" aria-hidden="true">📊</span>
                     <h1>Analis<span class="logo-accent">Trading</span></h1>
@@ -79,6 +83,9 @@
         <!-- Main Layout (Stock) -->
         <div class="main-layout" id="stockLayout">
             
+            <!-- Mobile Backdrop -->
+            <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
             <!-- Sidebar: Watchlist -->
             <aside id="sidebar" class="sidebar" role="complementary" aria-label="Watchlist saham">
                 <div class="sidebar-header">

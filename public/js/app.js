@@ -913,6 +913,35 @@ class App {
             });
         }
 
+        // Mobile Watchlist Toggle
+        const mobileWatchlistBtn = document.getElementById('mobileWatchlistBtn');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        const sidebar = document.getElementById('sidebar');
+
+        const toggleMobileSidebar = (show) => {
+            if (!sidebar) return;
+            const shouldShow = show !== undefined ? show : !sidebar.classList.contains('active');
+            sidebar.classList.toggle('active', shouldShow);
+            if (sidebarBackdrop) sidebarBackdrop.classList.toggle('active', shouldShow);
+        };
+
+        if (mobileWatchlistBtn) {
+            mobileWatchlistBtn.addEventListener('click', () => toggleMobileSidebar());
+        }
+        if (sidebarBackdrop) {
+            sidebarBackdrop.addEventListener('click', () => toggleMobileSidebar(false));
+        }
+
+        // Close mobile drawer when stock item in watchlist is clicked
+        const watchlistEl = document.getElementById('watchlist');
+        if (watchlistEl) {
+            watchlistEl.addEventListener('click', (e) => {
+                if (window.innerWidth < 900) {
+                    toggleMobileSidebar(false);
+                }
+            });
+        }
+
         // Pre-order badge click → switch to preorder tab
         const poBadgeBtn = document.getElementById('preorderBadgeBtn');
         if (poBadgeBtn) {

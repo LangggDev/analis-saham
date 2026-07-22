@@ -140,16 +140,86 @@ body {
   overflow: hidden;
 }
 
+/* ---------- Mobile Watchlist Toggle Button ---------- */
+.mobile-watchlist-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-watchlist-btn:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.mobile-btn-icon {
+  font-size: 1rem;
+}
+
+.mobile-btn-text {
+  font-size: 0.8rem;
+}
+
+/* ---------- Mobile Backdrop Overlay ---------- */
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 190;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (max-width: 900px) {
+  .mobile-watchlist-btn {
+    display: flex;
+  }
+
   .main-layout {
     flex-direction: column;
+    height: calc(100vh - 60px);
   }
 
   .sidebar {
-    width: 100% !important;
-    max-height: 200px;
-    border-right: none !important;
-    border-bottom: 1px solid var(--border-color);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 290px !important;
+    max-height: 100vh !important;
+    z-index: 200;
+    transform: translateX(-100%);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.25);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border-right: 1px solid var(--border-color) !important;
+    border-bottom: none !important;
+  }
+
+  .sidebar.active {
+    transform: translateX(0);
   }
 }
 
@@ -157,30 +227,30 @@ body {
    HEADER
    ============================================ */
 .header {
-  margin-top: 5px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 8px 20px;
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
   z-index: 100;
-  gap: 20px;
+  gap: 16px;
 }
 
 .header-left,
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .header-center {
   flex: 1;
-  max-width: 480px;
+  max-width: 460px;
   margin: 0 auto;
 }
 
@@ -4573,29 +4643,230 @@ body {
 }
 
 /* ============================================
-   Responsive: Recommendation
+   Global Responsive Breakpoint Rules
    ============================================ */
+
+/* --- Tablet / Mobile Header & Navigation (< 768px) --- */
 @media (max-width: 768px) {
-  .rec-cards-grid {
-    grid-template-columns: 1fr;
+  .header {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 8px;
   }
 
-  .rec-card-levels {
-    grid-template-columns: 1fr;
+  .header-left {
+    gap: 8px;
   }
 
-  .rec-block-header {
+  .logo h1 {
+    font-size: 1.05rem;
+  }
+
+  .header-center {
+    order: 3;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 4px;
+  }
+
+  #searchInput {
+    padding: 6px 32px 6px 34px;
+    font-size: 0.82rem;
+  }
+
+  .header-right {
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .timeframe-buttons {
+    max-width: 180px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .timeframe-buttons::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tf-btn {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+
+  .market-status-badge {
+    padding: 4px 8px;
+    font-size: 0.65rem;
+  }
+
+  .connection-status {
+    display: none;
+  }
+
+  /* Symbol Header */
+  .symbol-header {
+    padding: 12px 14px;
+  }
+
+  .symbol-name {
+    font-size: 1.25rem;
+  }
+
+  .symbol-fullname {
+    font-size: 0.8rem;
+  }
+
+  .current-price {
+    font-size: 1.35rem;
+  }
+
+  .price-change {
+    font-size: 0.82rem;
+  }
+
+  /* Combined Score Bar */
+  .combined-score-bar {
+    padding: 10px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .combined-score-left,
+  .combined-score-right {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .combined-score-gauge {
+    width: 100%;
+    margin: 4px 0;
+  }
+
+  /* Chart Container */
+  .chart-container {
+    height: 320px !important;
+  }
+
+  /* Panel Tabs Horizontal Touch Scroll */
+  .panel-tabs {
+    padding: 6px 12px;
+    gap: 4px;
+  }
+
+  .panel-tab {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  .tab-icon {
+    font-size: 0.9rem;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .stat-item {
+    padding: 8px 10px;
+  }
+
+  .stat-label {
+    font-size: 0.68rem;
+  }
+
+  .stat-value {
+    font-size: 0.85rem;
+  }
+
+  /* Fundamental Panel */
+  .fundamental-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .fundamental-metrics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  /* Screener */
+  .screener-header {
+    padding: 12px;
+  }
+
+  .screener-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .screener-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .screener-actions button {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* Pre-Order Form */
+  .preorder-form {
+    padding: 14px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .form-group-sm {
+    width: 100%;
+  }
+}
+
+/* --- Small Mobile Phones (< 480px) --- */
+@media (max-width: 480px) {
+  .logo h1 {
+    font-size: 0.95rem;
+  }
+
+  .mobile-btn-text {
+    display: none;
+  }
+
+  .mobile-watchlist-btn {
+    padding: 6px 8px;
+  }
+
+  .chart-container {
+    height: 280px !important;
+  }
+
+  .symbol-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
 
-  .rec-locked-time-info {
-    flex-direction: column;
-    gap: 8px;
+  .price-display {
+    width: 100%;
+    justify-content: space-between;
   }
 
-  .rec-locked-divider {
-    transform: rotate(90deg);
+  .rec-card {
+    padding: 12px;
+  }
+
+  .rec-card-price {
+    font-size: 1.1rem;
   }
 }
