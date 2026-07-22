@@ -1,0 +1,1164 @@
+import express from 'express';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import dotenv from 'dotenv';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ─── Middleware ──────────────────────────────────────────────────────────────
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── Yahoo Finance HTTP Client ──────────────────────────────────────────────
+// v8/chart endpoint works without crumb authentication
+// v10/v11 quoteSummary endpoints REQUIRE crumb + cookie authentication
+const YF_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.5',
+};
+
+// Crumb + Cookie cache for authenticated Yahoo requests
+let yfCrumbData = { crumb: null, cookie: null, timestamp: 0 };
+const CRUMB_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function getYahooCrumb() {
+  const now = Date.now();
+  if (yfCrumbData.crumb && yfCrumbData.cookie && (now - yfCrumbData.timestamp) < CRUMB_TTL_MS) {
+    return yfCrumbData;
+  }
+
+  console.log('[Yahoo] Fetching fresh crumb + cookie...');
+
+  try {
+    // Step 1: Get consent cookie from Yahoo Finance main page
+    const pageRes = await fetch('https://finance.yahoo.com/quote/AAPL/', {
+      headers: YF_HEADERS,
+      redirect: 'manual',
+    });
+
+    // Collect Set-Cookie headers
+    const setCookies = pageRes.headers.getSetCookie?.() || [];
+    let cookieStr = setCookies
+      .map(c => c.split(';')[0])
+      .join('; ');
+
+    // Follow redirects manually if needed to collect all cookies
+    if (pageRes.status >= 300 && pageRes.status < 400) {
+      const redir = pageRes.headers.get('location');
+      if (redir) {
+        const redirRes = await fetch(redir, {
+          headers: { ...YF_HEADERS, 'Cookie': cookieStr },
+          redirect: 'manual',
+        });
+        const moreCookies = redirRes.headers.getSetCookie?.() || [];
+        if (moreCookies.length > 0) {
+          cookieStr += '; ' + moreCookies.map(c => c.split(';')[0]).join('; ');
+        }
+      }
+    }
+
+    // Step 2: Fetch the crumb using the cookie
+    const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: {
+        ...YF_HEADERS,
+        'Accept': '*/*',
+        'Cookie': cookieStr,
+      },
+    });
+
+    if (!crumbRes.ok) {
+      throw new Error(`Crumb fetch failed: ${crumbRes.status}`);
+    }
+
+    const crumb = await crumbRes.text();
+    if (!crumb || crumb.length < 5) {
+      throw new Error(`Invalid crumb received: "${crumb}"`);
+    }
+
+    yfCrumbData = { crumb: crumb.trim(), cookie: cookieStr, timestamp: now };
+    console.log(`[Yahoo] Crumb obtained: ${yfCrumbData.crumb.substring(0, 8)}...`);
+    return yfCrumbData;
+
+  } catch (err) {
+    console.error('[Yahoo] Failed to get crumb:', err.message);
+    // Return stale data if available
+    if (yfCrumbData.crumb) return yfCrumbData;
+    throw err;
+  }
+}
+
+async function yahooFetch(url, extraHeaders = {}) {
+  const res = await fetch(url, {
+    headers: { ...YF_HEADERS, 'Accept': 'application/json', ...extraHeaders },
+  });
+  if (!res.ok) {
+    throw new Error(`Yahoo Finance API error: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+// Authenticated fetch for quoteSummary-type endpoints that need crumb
+async function yahooAuthFetch(baseUrl) {
+  const { crumb, cookie } = await getYahooCrumb();
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  const url = `${baseUrl}${separator}crumb=${encodeURIComponent(crumb)}`;
+  return yahooFetch(url, { 'Cookie': cookie });
+}
+
+// ─── In-Memory Cache ────────────────────────────────────────────────────────
+const cache = new Map();
+
+function withCache(key, ttlSeconds, fetchFn) {
+  const now = Date.now();
+  const cached = cache.get(key);
+  if (cached && now - cached.timestamp < ttlSeconds * 1000) {
+    return Promise.resolve(cached.data);
+  }
+  return fetchFn().then((data) => {
+    cache.set(key, { data, timestamp: now });
+    return data;
+  });
+}
+
+// Prune expired entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (now - entry.timestamp > 10 * 60 * 1000) cache.delete(key);
+  }
+}, 5 * 60 * 1000);
+
+// ─── Rate Limiting / Throttle ───────────────────────────────────────────────
+const MAX_CONCURRENT = 4;
+let activeCalls = 0;
+const waitQueue = [];
+
+function withThrottle(fn) {
+  return new Promise((resolve, reject) => {
+    const execute = () => {
+      activeCalls++;
+      fn()
+        .then(resolve)
+        .catch(reject)
+        .finally(() => {
+          activeCalls--;
+          if (waitQueue.length > 0) waitQueue.shift()();
+        });
+    };
+    if (activeCalls < MAX_CONCURRENT) execute();
+    else waitQueue.push(execute);
+  });
+}
+
+// ─── Retry Logic ────────────────────────────────────────────────────────────
+async function withRetry(fn, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 500;
+        console.warn(`  ⚠ Attempt ${attempt + 1} failed (${err.message}), retrying in ${delay}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
+// ─── Request Logger ─────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  }
+  next();
+});
+
+function yahooCall(fn) {
+  return withThrottle(() => withRetry(fn));
+}
+
+// ─── Helper: fetch chart + meta from v8 endpoint ────────────────────────────
+async function fetchChartData(symbol, interval = '1d', range = '6mo') {
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}&includePrePost=false`;
+  const result = await yahooFetch(url);
+  const chartResult = result?.chart?.result?.[0];
+  if (!chartResult) throw new Error(`No chart data for ${symbol}`);
+  return chartResult;
+}
+
+// ─── API: Quote ─────────────────────────────────────────────────────────────
+// Extracts real-time quote from chart endpoint meta data (no auth needed)
+app.get('/api/quote/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const data = await withCache(`quote:${symbol}`, 10, () =>
+      yahooCall(async () => {
+        const chart = await fetchChartData(symbol, '1d', '5d');
+        const meta = chart.meta;
+        const previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+        const price = meta.regularMarketPrice ?? 0;
+        const change = price - previousClose;
+        const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
+
+        return {
+          symbol: meta.symbol,
+          name: meta.shortName || meta.longName || symbol,
+          price,
+          change,
+          changePercent,
+          volume: meta.regularMarketVolume ?? 0,
+          marketCap: meta.marketCap ?? null,
+          dayHigh: meta.regularMarketDayHigh ?? 0,
+          dayLow: meta.regularMarketDayLow ?? 0,
+          open: meta.regularMarketOpen ?? 0,
+          previousClose,
+          fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? 0,
+          fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? 0,
+          currency: meta.currency || '',
+          exchange: meta.exchangeName || meta.fullExchangeName || '',
+          marketState: meta.marketState || 'UNKNOWN',
+        };
+      })
+    );
+    res.json(data);
+  } catch (err) {
+    console.error(`Error fetching quote for ${symbol}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch quote for ${symbol}`, details: err.message });
+  }
+});
+
+// ─── API: Chart ─────────────────────────────────────────────────────────────
+app.get('/api/chart/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const interval = req.query.interval || '1d';
+  const range = req.query.range || '6mo';
+  const cacheKey = `chart:${symbol}:${interval}:${range}`;
+
+  try {
+    // Shorter cache for intraday intervals to support real-time updates
+    const intradayIntervals = ['1m', '2m', '5m', '15m', '30m', '60m', '1h'];
+    const cacheTTL = intradayIntervals.includes(interval) ? 30 : 60;
+
+    const transformed = await withCache(cacheKey, cacheTTL, () =>
+      yahooCall(async () => {
+        // Auto-determine range based on interval
+        const intradayIntervals = ['1m', '2m', '5m', '15m', '30m', '60m', '1h'];
+        let useRange = range;
+        if (intradayIntervals.includes(interval)) {
+          switch (interval) {
+            case '1m': case '2m': useRange = '5d'; break;
+            case '5m': case '15m': case '30m': useRange = '1mo'; break;
+            case '60m': case '1h': useRange = '2mo'; break;
+            default: useRange = '1mo';
+          }
+        }
+
+        const chart = await fetchChartData(symbol, interval, useRange);
+        const timestamps = chart.timestamp || [];
+        const quote = chart.indicators?.quote?.[0] || {};
+
+        const candles = [];
+        for (let i = 0; i < timestamps.length; i++) {
+          if (quote.close?.[i] != null && quote.open?.[i] != null) {
+            candles.push({
+              time: timestamps[i],
+              open: quote.open[i],
+              high: quote.high?.[i] ?? quote.open[i],
+              low: quote.low?.[i] ?? quote.open[i],
+              close: quote.close[i],
+              volume: quote.volume?.[i] || 0,
+            });
+          }
+        }
+        return candles;
+      })
+    );
+    res.json(transformed);
+  } catch (err) {
+    console.error(`Error fetching chart for ${symbol}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch chart for ${symbol}`, details: err.message });
+  }
+});
+
+// ─── API: Search ────────────────────────────────────────────────────────────
+app.get('/api/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.status(400).json({ error: 'Query parameter "q" is required' });
+
+  try {
+    const results = await withCache(`search:${query.toLowerCase()}`, 300, () =>
+      yahooCall(async () => {
+        const result = await yahooFetch(
+          `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`
+        );
+        return (result?.quotes || []).map((item) => ({
+          symbol: item.symbol,
+          name: item.shortname || item.longname || item.symbol,
+          exchange: item.exchDisp || item.exchange,
+          type: item.quoteType || item.typeDisp,
+        }));
+      })
+    );
+    res.json(results);
+  } catch (err) {
+    console.error(`Error searching for "${query}":`, err.message);
+    res.status(500).json({ error: `Failed to search for "${query}"`, details: err.message });
+  }
+});
+
+// ─── Helper: fetch news data ──────────────────────────────────────────────────
+async function fetchNewsData(symbol) {
+  const baseSymbol = symbol.split('.')[0]; // remove .JK or other extensions
+  return await withCache(`news:${symbol}`, 300, () =>
+    yahooCall(async () => {
+      const result = await yahooFetch(
+        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=0&newsCount=20&listsCount=0`
+      );
+      
+      const rawNews = result?.news || [];
+      
+      const filteredNews = rawNews.filter(item => {
+          if (item.relatedTickers && item.relatedTickers.length > 0) {
+              return item.relatedTickers.some(t => t.toUpperCase().includes(baseSymbol));
+          }
+          return item.title && item.title.toUpperCase().includes(baseSymbol);
+      });
+
+      return filteredNews.map((item) => ({
+        title: item.title,
+        link: item.link,
+        publisher: item.publisher,
+        publishedAt: item.providerPublishTime
+          ? new Date(item.providerPublishTime * 1000).toISOString()
+          : null,
+        thumbnail: item.thumbnail?.resolutions?.[0]?.url || null,
+      }));
+    })
+  );
+}
+
+// ─── API: News ──────────────────────────────────────────────────────────────
+app.get('/api/news/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const news = await fetchNewsData(symbol);
+    res.json(news);
+  } catch (err) {
+    console.error(`Error fetching news for ${symbol}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch news for ${symbol}`, details: err.message });
+  }
+});
+
+// ─── Sentiment Analysis Helper ─────────────────────────────────────────────
+const keywordSentiment = (text) => {
+  const positive = ['naik', 'laba', 'untung', 'tumbuh', 'rekor', 'lonjakan', 'beli', 'bullish', 'investasi', 'dividen', 'profit', 'growth', 'surge', 'buy'];
+  const negative = ['turun', 'rugi', 'anjlok', 'merosot', 'jual', 'bearish', 'skandal', 'denda', 'phk', 'loss', 'drop', 'plunge', 'sell', 'cut'];
+  
+  const words = text.toLowerCase().match(/\b\w+\b/g) || [];
+  let posCount = 0;
+  let negCount = 0;
+  
+  words.forEach(w => {
+    if (positive.includes(w)) posCount++;
+    if (negative.includes(w)) negCount++;
+  });
+  
+  let sentiment = 'NEUTRAL';
+  let score = 50;
+  
+  if (posCount > negCount) {
+    sentiment = 'POSITIVE';
+    score = 75 + Math.min(25, (posCount - negCount) * 5);
+  } else if (negCount > posCount) {
+    sentiment = 'NEGATIVE';
+    score = 25 - Math.min(25, (negCount - posCount) * 5);
+  }
+  
+  return { sentiment, score };
+};
+
+// ─── API: Sentiment ─────────────────────────────────────────────────────────
+app.get('/api/sentiment/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const news = await fetchNewsData(symbol);
+    if (!news || news.length === 0) {
+      return res.json({ symbol, overallSentiment: 'NEUTRAL', score: 50, articlesAnalyzed: 0, articles: [], _method: 'none' });
+    }
+
+    const articlesToAnalyze = news.slice(0, 10);
+    
+    // Check if Gemini AI is available
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        
+        const prompt = `Analyze the sentiment of the following news headlines for stock ${symbol}.
+For each headline, provide a sentiment (POSITIVE, NEGATIVE, or NEUTRAL) and a score from 0 to 100 (where 0 is extremely negative, 50 is neutral, and 100 is extremely positive).
+Format your response as a valid JSON array of objects, where each object has "sentiment" (string) and "score" (number). Do not include any markdown formatting or extra text, just the JSON array.
+Headlines:
+${articlesToAnalyze.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`;
+
+        const result = await model.generateContent(prompt);
+        let text = result.response.text();
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const aiResults = JSON.parse(text);
+        
+        let totalScore = 0;
+        const articles = articlesToAnalyze.map((article, i) => {
+          const aiResult = aiResults[i] || { sentiment: 'NEUTRAL', score: 50 };
+          totalScore += aiResult.score;
+          return {
+            title: article.title,
+            sentiment: aiResult.sentiment,
+            score: aiResult.score,
+            source: 'gemini',
+            publisher: article.publisher,
+            publishedAt: article.publishedAt,
+            link: article.link
+          };
+        });
+        
+        const avgScore = Math.round(totalScore / articles.length);
+        let overallSentiment = 'NEUTRAL';
+        if (avgScore >= 65) overallSentiment = 'POSITIVE';
+        else if (avgScore <= 35) overallSentiment = 'NEGATIVE';
+        
+        return res.json({
+          symbol,
+          overallSentiment,
+          score: avgScore,
+          articlesAnalyzed: articles.length,
+          articles,
+          _method: 'gemini'
+        });
+        
+      } catch (aiError) {
+        console.warn('Gemini API failed, falling back to keyword analysis:', aiError.message);
+      }
+    }
+    
+    // Fallback: Keyword analysis
+    let totalScore = 0;
+    const articles = articlesToAnalyze.map(article => {
+      const { sentiment, score } = keywordSentiment(article.title);
+      totalScore += score;
+      return {
+        title: article.title,
+        sentiment,
+        score,
+        source: 'keyword',
+        publisher: article.publisher,
+        publishedAt: article.publishedAt,
+        link: article.link
+      };
+    });
+    
+    const avgScore = Math.round(totalScore / articles.length);
+    let overallSentiment = 'NEUTRAL';
+    if (avgScore >= 60) overallSentiment = 'POSITIVE';
+    else if (avgScore <= 40) overallSentiment = 'NEGATIVE';
+    
+    res.json({
+      symbol,
+      overallSentiment,
+      score: avgScore,
+      articlesAnalyzed: articles.length,
+      articles,
+      _method: 'keyword'
+    });
+    
+  } catch (err) {
+    console.error(`Error fetching sentiment for ${symbol}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch sentiment for ${symbol}`, details: err.message });
+  }
+});
+
+// ─── API: Summary ───────────────────────────────────────────────────────────
+// Uses chart meta + additional data for fundamental info
+app.get('/api/summary/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const summary = await withCache(`summary:${symbol}`, 600, () =>
+      yahooCall(async () => {
+        const chart = await fetchChartData(symbol, '1d', '1y');
+        const meta = chart.meta;
+        return {
+          symbol: meta.symbol,
+          currency: meta.currency,
+          exchange: meta.exchangeName,
+          regularMarketPrice: meta.regularMarketPrice,
+          fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+          fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+          chartPreviousClose: meta.chartPreviousClose,
+        };
+      })
+    );
+    res.json(summary);
+  } catch (err) {
+    console.error(`Error fetching summary for ${symbol}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch summary for ${symbol}`, details: err.message });
+  }
+});
+
+// ─── API: Fundamental Data ──────────────────────────────────────────────
+app.get('/api/fundamental/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const fundamental = await withCache(`fundamental:${symbol}`, 600, () =>
+      yahooCall(async () => {
+        // Try quoteSummary endpoint for rich fundamental data (requires crumb auth)
+        const modules = 'financialData,defaultKeyStatistics,summaryDetail,earningsHistory,balanceSheetHistory,incomeStatementHistory';
+        const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+        
+        let result;
+        try {
+          result = await yahooAuthFetch(url);
+        } catch (e) {
+          console.warn(`[Fundamental] v10 failed for ${symbol}: ${e.message}, trying v11...`);
+          // Fallback: try v11 endpoint
+          try {
+            const url2 = `https://query1.finance.yahoo.com/v11/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+            result = await yahooAuthFetch(url2);
+          } catch (e2) {
+            console.warn(`[Fundamental] v11 also failed for ${symbol}: ${e2.message}, using chart fallback`);
+            // Final fallback: derive basic data from chart meta
+            const chart = await fetchChartData(symbol, '1d', '1y');
+            const meta = chart.meta;
+            return {
+              symbol: meta.symbol || symbol,
+              per: null,
+              pbv: null,
+              roe: null,
+              der: null,
+              eps: null,
+              dividendYield: null,
+              revenueGrowth: null,
+              profitMargin: null,
+              currentRatio: null,
+              freeCashFlow: null,
+              marketCap: meta.marketCap || null,
+              fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || null,
+              fiftyTwoWeekLow: meta.fiftyTwoWeekLow || null,
+              price: meta.regularMarketPrice || null,
+              _source: 'chart_fallback',
+              _hasData: false,
+            };
+          }
+        }
+
+        const summary = result?.quoteSummary?.result?.[0];
+        if (!summary) throw new Error(`No fundamental data for ${symbol}`);
+
+        const fd = summary.financialData || {};
+        const ks = summary.defaultKeyStatistics || {};
+        const sd = summary.summaryDetail || {};
+
+        // Extract raw values safely
+        const getRaw = (obj, key) => {
+          const val = obj?.[key];
+          if (val === undefined || val === null) return null;
+          if (typeof val === 'object' && val.raw !== undefined) return val.raw;
+          if (typeof val === 'number') return val;
+          return null;
+        };
+
+        const getFmt = (obj, key) => {
+          const val = obj?.[key];
+          if (val === undefined || val === null) return null;
+          if (typeof val === 'object' && val.fmt !== undefined) return val.fmt;
+          if (typeof val === 'string') return val;
+          return null;
+        };
+
+        return {
+          symbol: symbol,
+          // Valuation
+          per: getRaw(sd, 'trailingPE') ?? getRaw(ks, 'trailingPE') ?? getRaw(sd, 'forwardPE'),
+          forwardPE: getRaw(sd, 'forwardPE') ?? getRaw(ks, 'forwardPE'),
+          pbv: getRaw(ks, 'priceToBook'),
+          priceToSales: getRaw(ks, 'priceToSalesTrailing12Months'),
+          enterpriseValue: getRaw(ks, 'enterpriseValue'),
+          
+          // Profitability
+          roe: getRaw(fd, 'returnOnEquity'),
+          roa: getRaw(fd, 'returnOnAssets'),
+          profitMargin: getRaw(fd, 'profitMargins'),
+          operatingMargin: getRaw(fd, 'operatingMargins'),
+          grossMargin: getRaw(fd, 'grossMargins'),
+          
+          // Financial health
+          der: getRaw(fd, 'debtToEquity') != null ? getRaw(fd, 'debtToEquity') / 100 : null,
+          currentRatio: getRaw(fd, 'currentRatio'),
+          quickRatio: getRaw(fd, 'quickRatio'),
+          
+          // Per-share data
+          eps: getRaw(ks, 'trailingEps') ?? getRaw(fd, 'earningsPerShare'),
+          bookValue: getRaw(ks, 'bookValue'),
+          
+          // Growth
+          revenueGrowth: getRaw(fd, 'revenueGrowth'),
+          earningsGrowth: getRaw(fd, 'earningsGrowth'),
+          
+          // Income
+          dividendYield: getRaw(sd, 'dividendYield') ?? getRaw(ks, 'lastDividendValue'),
+          dividendRate: getRaw(sd, 'dividendRate'),
+          payoutRatio: getRaw(sd, 'payoutRatio'),
+          
+          // Cash flow
+          freeCashFlow: getRaw(fd, 'freeCashflow'),
+          operatingCashFlow: getRaw(fd, 'operatingCashflow'),
+          totalRevenue: getRaw(fd, 'totalRevenue'),
+          totalDebt: getRaw(fd, 'totalDebt'),
+          totalCash: getRaw(fd, 'totalCash'),
+          
+          // Market data
+          marketCap: getRaw(sd, 'marketCap'),
+          beta: getRaw(ks, 'beta'),
+          fiftyTwoWeekHigh: getRaw(sd, 'fiftyTwoWeekHigh'),
+          fiftyTwoWeekLow: getRaw(sd, 'fiftyTwoWeekLow'),
+          fiftyDayAverage: getRaw(sd, 'fiftyDayAverage'),
+          twoHundredDayAverage: getRaw(sd, 'twoHundredDayAverage'),
+          
+          // Formatted strings for display
+          _formatted: {
+            per: getFmt(sd, 'trailingPE') ?? getFmt(ks, 'trailingPE'),
+            pbv: getFmt(ks, 'priceToBook'),
+            roe: getFmt(fd, 'returnOnEquity'),
+            profitMargin: getFmt(fd, 'profitMargins'),
+            dividendYield: getFmt(sd, 'dividendYield'),
+            revenueGrowth: getFmt(fd, 'revenueGrowth'),
+          },
+          _source: 'quoteSummary',
+        };
+      })
+    );
+    res.json(fundamental);
+  } catch (err) {
+    console.error(`Error fetching fundamental for ${symbol}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch fundamental data for ${symbol}`, details: err.message });
+  }
+});
+
+// ─── API: Market Status ─────────────────────────────────────────────────
+app.get('/api/market-status/:exchange', async (req, res) => {
+  const exchange = req.params.exchange.toUpperCase();
+  const cacheKey = `market-status:${exchange}`;
+
+  try {
+    const status = await withCache(cacheKey, 30, () => {
+      const now = new Date();
+      
+      // Market hours configuration (all times in local timezone)
+      const markets = {
+        // Indonesian Stock Exchange (IDX) — WIB (UTC+7)
+        'IDX': { tz: 7, open: [9, 0], close: [15, 30], days: [1,2,3,4,5], name: 'Indonesia Stock Exchange', preOpen: [8, 45] },
+        'JKT': { tz: 7, open: [9, 0], close: [15, 30], days: [1,2,3,4,5], name: 'Indonesia Stock Exchange', preOpen: [8, 45] },
+        // US Markets — ET (UTC-4 DST / UTC-5 EST)
+        'NYSE': { tz: -4, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'New York Stock Exchange', preOpen: [4, 0] },
+        'NASDAQ': { tz: -4, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'NASDAQ', preOpen: [4, 0] },
+        'NMS': { tz: -4, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'NASDAQ', preOpen: [4, 0] },
+        // Hong Kong
+        'HKSE': { tz: 8, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'Hong Kong Stock Exchange', preOpen: [9, 0] },
+        // Tokyo
+        'TSE': { tz: 9, open: [9, 0], close: [15, 0], days: [1,2,3,4,5], name: 'Tokyo Stock Exchange', preOpen: [8, 0] },
+        // London
+        'LSE': { tz: 1, open: [8, 0], close: [16, 30], days: [1,2,3,4,5], name: 'London Stock Exchange', preOpen: [7, 0] },
+      };
+
+      const market = markets[exchange] || markets['IDX'];
+      
+      // Convert current UTC time to market local time
+      const utcHours = now.getUTCHours();
+      const utcMinutes = now.getUTCMinutes();
+      const utcDay = now.getUTCDay();
+      
+      let localHours = (utcHours + market.tz + 24) % 24;
+      let localMinutes = utcMinutes;
+      let localDay = utcDay;
+      
+      // Adjust day if timezone shift crosses midnight
+      if (utcHours + market.tz >= 24) localDay = (utcDay + 1) % 7;
+      if (utcHours + market.tz < 0) localDay = (utcDay + 6) % 7;
+      
+      const localTimeMinutes = localHours * 60 + localMinutes;
+      const openMinutes = market.open[0] * 60 + market.open[1];
+      const closeMinutes = market.close[0] * 60 + market.close[1];
+      const preOpenMinutes = market.preOpen ? market.preOpen[0] * 60 + market.preOpen[1] : openMinutes - 30;
+      
+      const isWeekday = market.days.includes(localDay);
+      
+      let state, label;
+      if (!isWeekday) {
+        state = 'CLOSED';
+        label = 'Pasar tutup (akhir pekan)';
+      } else if (localTimeMinutes >= openMinutes && localTimeMinutes < closeMinutes) {
+        state = 'OPEN';
+        label = 'Pasar sedang buka';
+      } else if (localTimeMinutes >= preOpenMinutes && localTimeMinutes < openMinutes) {
+        state = 'PRE_MARKET';
+        label = 'Pre-market / Pre-opening';
+      } else {
+        state = 'CLOSED';
+        label = 'Pasar tutup';
+      }
+      
+      // Calculate next open time
+      let nextOpenText = '';
+      if (state !== 'OPEN') {
+        const openH = String(market.open[0]).padStart(2, '0');
+        const openM = String(market.open[1]).padStart(2, '0');
+        if (state === 'CLOSED' && isWeekday && localTimeMinutes < openMinutes) {
+          nextOpenText = `Buka hari ini pukul ${openH}:${openM}`;
+        } else {
+          nextOpenText = `Buka besok pukul ${openH}:${openM}`;
+        }
+      }
+
+      return Promise.resolve({
+        exchange: exchange,
+        name: market.name,
+        state,
+        label,
+        nextOpen: nextOpenText,
+        localTime: `${String(localHours).padStart(2,'0')}:${String(localMinutes).padStart(2,'0')}`,
+        tradingHours: `${String(market.open[0]).padStart(2,'0')}:${String(market.open[1]).padStart(2,'0')} - ${String(market.close[0]).padStart(2,'0')}:${String(market.close[1]).padStart(2,'0')}`,
+        isPreOrderMode: state !== 'OPEN',
+      });
+    });
+    res.json(status);
+  } catch (err) {
+    console.error(`Error getting market status for ${exchange}:`, err.message);
+    res.status(500).json({ error: `Failed to get market status`, details: err.message });
+  }
+});
+
+
+
+// ─── API: Stock Recommendations ─────────────────────────────────────────
+
+// Helper: Analyze a stock for recommendation
+async function analyzeStockForRecommendation(symbol) {
+  try {
+    const [chartResult, quoteResult] = await Promise.all([
+      yahooCall(() => fetchChartData(symbol, '1d', '6mo')),
+      yahooCall(async () => {
+        const chart = await fetchChartData(symbol, '1d', '5d');
+        const meta = chart.meta;
+        return {
+          symbol: meta.symbol,
+          name: meta.shortName || meta.longName || symbol,
+          price: meta.regularMarketPrice ?? 0,
+          change: (meta.regularMarketPrice ?? 0) - (meta.chartPreviousClose ?? 0),
+          changePercent: meta.chartPreviousClose > 0
+            ? (((meta.regularMarketPrice ?? 0) - meta.chartPreviousClose) / meta.chartPreviousClose) * 100
+            : 0,
+          volume: meta.regularMarketVolume ?? 0,
+          previousClose: meta.chartPreviousClose ?? 0,
+          dayHigh: meta.regularMarketDayHigh ?? 0,
+          dayLow: meta.regularMarketDayLow ?? 0,
+          fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? 0,
+          fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? 0,
+          exchange: meta.exchangeName || '',
+        };
+      }),
+    ]);
+
+    const timestamps = chartResult.timestamp || [];
+    const quotes = chartResult.indicators?.quote?.[0] || {};
+    const ohlcv = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      if (quotes.close?.[i] != null && quotes.open?.[i] != null) {
+        ohlcv.push({
+          time: timestamps[i],
+          open: quotes.open[i],
+          high: quotes.high?.[i] ?? quotes.open[i],
+          low: quotes.low?.[i] ?? quotes.open[i],
+          close: quotes.close[i],
+          volume: quotes.volume?.[i] || 0,
+        });
+      }
+    }
+
+    if (ohlcv.length < 30) return null;
+
+    // Basic technical analysis (server-side simplified version)
+    const closes = ohlcv.map(d => d.close);
+    const lastPrice = closes[closes.length - 1];
+    const prevPrice = closes[closes.length - 2] || lastPrice;
+
+    // SMA calculations
+    const calcSMA = (arr, period) => {
+      if (arr.length < period) return null;
+      const slice = arr.slice(-period);
+      return slice.reduce((a, b) => a + b, 0) / period;
+    };
+
+    const sma20 = calcSMA(closes, 20);
+    const sma50 = calcSMA(closes, 50);
+    const sma200 = calcSMA(closes, 200);
+
+    // RSI calculation
+    let avgGain = 0, avgLoss = 0;
+    const period = 14;
+    for (let i = closes.length - period; i < closes.length; i++) {
+      const change = closes[i] - closes[i - 1];
+      if (change > 0) avgGain += change;
+      else avgLoss += Math.abs(change);
+    }
+    avgGain /= period;
+    avgLoss /= period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+
+    // Volume analysis
+    const recentVol = ohlcv.slice(-5).map(d => d.volume);
+    const avgVol = ohlcv.slice(-20).reduce((s, d) => s + d.volume, 0) / 20;
+    const lastVol = ohlcv[ohlcv.length - 1].volume;
+    const volRatio = avgVol > 0 ? lastVol / avgVol : 1;
+
+    // Simple scoring
+    let score = 50;
+    if (sma20 && lastPrice > sma20) score += 8;
+    else if (sma20) score -= 8;
+    if (sma50 && lastPrice > sma50) score += 10;
+    else if (sma50) score -= 10;
+    if (sma200 && lastPrice > sma200) score += 12;
+    else if (sma200) score -= 12;
+    if (rsi < 30) score += 15;
+    else if (rsi < 40) score += 8;
+    else if (rsi > 70) score -= 15;
+    else if (rsi > 60) score -= 8;
+    if (sma50 && sma200 && sma50 > sma200) score += 10; // golden cross area
+    else if (sma50 && sma200) score -= 10;
+    if (volRatio > 1.5 && lastPrice > prevPrice) score += 5;
+    if (volRatio > 1.5 && lastPrice < prevPrice) score -= 5;
+
+    score = Math.max(0, Math.min(100, score));
+
+    let signal;
+    if (score >= 75) signal = 'STRONG_BUY';
+    else if (score >= 60) signal = 'BUY';
+    else if (score >= 40) signal = 'NEUTRAL';
+    else if (score >= 25) signal = 'SELL';
+    else signal = 'STRONG_SELL';
+
+    // Support/Resistance estimates
+    const recentLows = ohlcv.slice(-20).map(d => d.low);
+    const recentHighs = ohlcv.slice(-20).map(d => d.high);
+    const support = Math.min(...recentLows);
+    const resistance = Math.max(...recentHighs);
+
+    return {
+      symbol,
+      name: quoteResult.name,
+      price: lastPrice,
+      change: quoteResult.change,
+      changePercent: quoteResult.changePercent,
+      volume: quoteResult.volume,
+      previousClose: quoteResult.previousClose,
+      dayHigh: quoteResult.dayHigh,
+      dayLow: quoteResult.dayLow,
+      fiftyTwoWeekHigh: quoteResult.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: quoteResult.fiftyTwoWeekLow,
+      score,
+      signal,
+      rsi: parseFloat(rsi.toFixed(1)),
+      sma20,
+      sma50,
+      sma200,
+      volRatio: parseFloat(volRatio.toFixed(2)),
+      support: parseFloat(support.toFixed(0)),
+      resistance: parseFloat(resistance.toFixed(0)),
+    };
+  } catch (err) {
+    console.warn(`[Recommendation] Failed to analyze ${symbol}:`, err.message);
+    return null;
+  }
+}
+
+// Recommendation symbols (60+ Top Liquid IDX Stocks)
+const RECOMMENDATION_SYMBOLS = [
+  // Big Banks & Financials
+  'BBRI.JK', 'BBCA.JK', 'BMRI.JK', 'BBNI.JK', 'BRIS.JK', 'ARTO.JK', 'BNGA.JK', 'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'NISP.JK', 'SRTG.JK',
+  // Mining, Energy & Metals
+  'ADRO.JK', 'PTBA.JK', 'ANTM.JK', 'INCO.JK', 'MDKA.JK', 'PGAS.JK', 'MEDC.JK', 'AKRA.JK', 'ESSA.JK', 'AMMN.JK', 'BREN.JK', 'CUAN.JK', 'PGEO.JK', 'NCKL.JK', 'MBMA.JK', 'HRUM.JK', 'ITMG.JK', 'INDY.JK',
+  // Telecommunications & Infrastructure
+  'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK',
+  // Automotive, Industrial & Conglomerates
+  'ASII.JK', 'AUTO.JK', 'UNTR.JK', 'GGRM.JK', 'HMSP.JK',
+  // Consumer, Food & Healthcare
+  'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'KLBF.JK', 'CPIN.JK', 'JPFA.JK', 'SIDO.JK', 'CMRY.JK', 'MYOR.JK', 'AMRT.JK', 'KAEF.JK', 'MIKA.JK',
+  // Property & Materials
+  'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'SMGR.JK', 'INTP.JK', 'BRPT.JK', 'TPIA.JK', 'INKP.JK',
+  // Tech & Retail
+  'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'ACES.JK', 'MAPI.JK', 'ERAA.JK'
+];
+
+// Helper: Run parallel batch tasks
+async function analyzeBatch(symbols, batchSize = 5) {
+  const results = [];
+  for (let i = 0; i < symbols.length; i += batchSize) {
+    const chunk = symbols.slice(i, i + batchSize);
+    const chunkResults = await Promise.all(
+      chunk.map(symbol => analyzeStockForRecommendation(symbol))
+    );
+    chunkResults.forEach(r => { if (r) results.push(r); });
+    if (i + batchSize < symbols.length) {
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+  return results;
+}
+
+// API: Recommendations for Today
+app.get('/api/recommendations/today', async (req, res) => {
+  try {
+    const data = await withCache('recommendations:today', 1800, async () => {
+      console.log('[Recommendations] Generating today\'s recommendations...');
+
+      // Batch analyze all stocks in chunks of 5
+      const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 5);
+
+      // Sort by score (best first)
+      analyses.sort((a, b) => b.score - a.score);
+
+      // Get top picks (score >= 55) and bottom picks (score <= 35)
+      const buyPicks = analyses.filter(a => a.score >= 55).slice(0, 8);
+      const sellPicks = analyses.filter(a => a.score <= 35).slice(0, 4);
+      const holdPicks = analyses.filter(a => a.score > 35 && a.score < 55).slice(0, 4);
+
+      // Use Gemini AI for analysis text
+      let aiAnalysis = {};
+      if (process.env.GEMINI_API_KEY && buyPicks.length > 0) {
+        try {
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+          const stockSummaries = buyPicks.slice(0, 5).map(s =>
+            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, Support ${s.support}, Resistance ${s.resistance}, Skor ${s.score}`
+          ).join('\n');
+
+          const prompt = `Kamu adalah analis saham profesional Indonesia. Berdasarkan data teknikal berikut, berikan rekomendasi singkat untuk HARI INI dalam Bahasa Indonesia.
+
+Data saham:
+${stockSummaries}
+
+Untuk setiap saham, berikan:
+1. entry_low dan entry_high (range harga beli)
+2. stop_loss (harga cut loss)
+3. take_profit (target profit)
+4. reasoning (alasan singkat 1-2 kalimat, dalam Bahasa Indonesia)
+
+Format response sebagai JSON array (tanpa markdown wrapper), contoh:
+[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4250,"take_profit":4800,"reasoning":"RSI oversold dengan golden cross, potensi rebound kuat."}]`;
+
+          const result = await model.generateContent(prompt);
+          let text = result.response.text();
+          text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const aiResults = JSON.parse(text);
+          aiResults.forEach(r => { aiAnalysis[r.symbol] = r; });
+        } catch (aiErr) {
+          console.warn('[Recommendations] Gemini AI failed:', aiErr.message);
+        }
+      }
+
+      // Merge AI analysis into picks
+      const enrichPick = (pick) => {
+        const ai = aiAnalysis[pick.symbol] || {};
+        return {
+          ...pick,
+          entryLow: ai.entry_low || pick.support,
+          entryHigh: ai.entry_high || pick.price,
+          stopLoss: ai.stop_loss || Math.round(pick.support * 0.97),
+          takeProfit: ai.take_profit || Math.round(pick.resistance * 1.02),
+          reasoning: ai.reasoning || generateFallbackReasoning(pick),
+        };
+      };
+
+      return {
+        timestamp: new Date().toISOString(),
+        type: 'today',
+        buyPicks: buyPicks.map(enrichPick),
+        sellPicks: sellPicks.map(p => ({
+          ...p,
+          reasoning: generateFallbackReasoning(p),
+        })),
+        holdPicks: holdPicks.map(p => ({
+          ...p,
+          reasoning: generateFallbackReasoning(p),
+        })),
+        totalAnalyzed: analyses.length,
+      };
+    });
+
+    res.json(data);
+  } catch (err) {
+    console.error('[Recommendations] Error:', err.message);
+    res.status(500).json({ error: 'Failed to generate recommendations', details: err.message });
+  }
+});
+
+// API: Recommendations for Tomorrow Morning
+app.get('/api/recommendations/tomorrow', async (req, res) => {
+  // Time gate: only available after 19:00 WIB (UTC+7)
+  const now = new Date();
+  const utcHours = now.getUTCHours();
+  const wibHours = (utcHours + 7) % 24;
+
+  if (wibHours < 19 && !(wibHours < 5)) {
+    // Before 19:00 WIB and after 05:00 WIB = locked
+    return res.json({
+      locked: true,
+      message: 'Rekomendasi besok pagi tersedia mulai pukul 19:00 WIB',
+      currentTimeWIB: `${String(wibHours).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')} WIB`,
+      availableAt: '19:00 WIB',
+    });
+  }
+
+  try {
+    const data = await withCache('recommendations:tomorrow', 3600, async () => {
+      console.log('[Recommendations] Generating tomorrow morning recommendations...');
+
+      const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 5);
+
+      analyses.sort((a, b) => b.score - a.score);
+
+      // Tomorrow picks: focus on best setups for morning opening
+      const morningPicks = analyses.filter(a => a.score >= 55).slice(0, 6);
+      const avoidPicks = analyses.filter(a => a.score <= 30).slice(0, 4);
+
+      // Use Gemini AI for tomorrow analysis
+      let aiAnalysis = {};
+      if (process.env.GEMINI_API_KEY && morningPicks.length > 0) {
+        try {
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+          const stockSummaries = morningPicks.map(s =>
+            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, Support ${s.support}, Resistance ${s.resistance}, Skor ${s.score}`
+          ).join('\n');
+
+          const prompt = `Kamu adalah analis saham profesional Indonesia. Berdasarkan data teknikal end-of-day berikut, berikan rekomendasi untuk PEMBUKAAN BESOK PAGI dalam Bahasa Indonesia.
+
+Fokus pada:
+- Saham yang berpotensi gap up atau rally di pembukaan
+- Entry point yang optimal saat pre-market/opening
+- Risk management yang ketat
+
+Data saham:
+${stockSummaries}
+
+Untuk setiap saham, berikan:
+1. entry_low dan entry_high (range harga beli saat opening besok)
+2. stop_loss (harga cut loss, max 3-5% dari entry)
+3. take_profit (target jual jangka pendek 1-3 hari)
+4. reasoning (alasan singkat 2-3 kalimat mengapa layak beli besok pagi, dalam Bahasa Indonesia)
+5. priority (1-5, dimana 1 = paling prioritas)
+
+Format response sebagai JSON array (tanpa markdown wrapper), contoh:
+[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4300,"take_profit":4800,"reasoning":"RSI menunjukkan kondisi oversold...","priority":1}]`;
+
+          const result = await model.generateContent(prompt);
+          let text = result.response.text();
+          text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const aiResults = JSON.parse(text);
+          aiResults.forEach(r => { aiAnalysis[r.symbol] = r; });
+        } catch (aiErr) {
+          console.warn('[Recommendations] Gemini AI tomorrow failed:', aiErr.message);
+        }
+      }
+
+      const enrichPick = (pick) => {
+        const ai = aiAnalysis[pick.symbol] || {};
+        return {
+          ...pick,
+          entryLow: ai.entry_low || pick.support,
+          entryHigh: ai.entry_high || pick.price,
+          stopLoss: ai.stop_loss || Math.round(pick.support * 0.97),
+          takeProfit: ai.take_profit || Math.round(pick.resistance * 1.02),
+          reasoning: ai.reasoning || generateFallbackReasoning(pick),
+          priority: ai.priority || 3,
+        };
+      };
+
+      return {
+        timestamp: new Date().toISOString(),
+        type: 'tomorrow',
+        locked: false,
+        morningPicks: morningPicks.map(enrichPick).sort((a, b) => (a.priority || 3) - (b.priority || 3)),
+        avoidPicks: avoidPicks.map(p => ({
+          ...p,
+          reasoning: generateFallbackReasoning(p),
+        })),
+        totalAnalyzed: analyses.length,
+      };
+    });
+
+    res.json(data);
+  } catch (err) {
+    console.error('[Recommendations] Tomorrow error:', err.message);
+    res.status(500).json({ error: 'Failed to generate tomorrow recommendations', details: err.message });
+  }
+});
+
+// Fallback reasoning generator
+function generateFallbackReasoning(stock) {
+  const parts = [];
+  if (stock.rsi < 30) parts.push('RSI sangat oversold — potensi rebound kuat');
+  else if (stock.rsi < 40) parts.push('RSI mendekati oversold');
+  else if (stock.rsi > 70) parts.push('RSI overbought — waspada koreksi');
+  else if (stock.rsi > 60) parts.push('RSI condong overbought');
+  else parts.push(`RSI netral (${stock.rsi})`);
+
+  if (stock.sma50 && stock.sma200) {
+    if (stock.sma50 > stock.sma200) parts.push('trend jangka panjang bullish (golden cross area)');
+    else parts.push('trend jangka panjang bearish');
+  }
+
+  if (stock.volRatio > 1.5) parts.push(`volume ${stock.volRatio}x di atas rata-rata`);
+  else if (stock.volRatio < 0.5) parts.push('volume sangat rendah');
+
+  if (stock.price > stock.sma20 && stock.sma20) parts.push('harga di atas SMA20');
+  else if (stock.sma20) parts.push('harga di bawah SMA20');
+
+  return parts.join('. ') + '.';
+}
+
+// ─── Fallback: Serve index.html ─────────────────────────────────────────────
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ─── Start Server ───────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
+  console.log(`║   📊 StockPulse — Real-Time Stock Analysis Dashboard v2.0  ║`);
+  console.log(`╠══════════════════════════════════════════════════════════════╣`);
+  console.log(`║   URL: http://localhost:${PORT}                               ║`);
+  console.log(`╠══════════════════════════════════════════════════════════════╣`);
+  console.log(`║   Endpoints:                                                ║`);
+  console.log(`║   GET /api/quote/:symbol         — Real-time quote          ║`);
+  console.log(`║   GET /api/chart/:symbol         — Historical OHLCV         ║`);
+  console.log(`║   GET /api/search?q=             — Symbol search            ║`);
+  console.log(`║   GET /api/news/:symbol          — Latest news              ║`);
+  console.log(`║   GET /api/summary/:symbol       — Company summary          ║`);
+  console.log(`║   GET /api/fundamental/:symbol   — Fundamental data (NEW)   ║`);
+  console.log(`║   GET /api/market-status/:exch   — Market hours (NEW)       ║`);
+  console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
+});

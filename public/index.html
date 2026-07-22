@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockPulse — Real-Time Stock Analysis Dashboard</title>
+    <meta name="description" content="Professional real-time stock analysis dashboard with technical indicators, fundamental analysis, pre-order system, and trading signals">
+    <meta name="theme-color" content="#f8fafc">
+    <meta name="color-scheme" content="light">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <script type="text/javascript" src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app" class="app-container">
+        
+        <!-- Header -->
+        <header id="header" class="header" role="banner">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon" aria-hidden="true">📊</span>
+                    <h1>Analis<span class="logo-accent">Trading</span></h1>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="search-container" id="searchContainer" role="search">
+                    <div class="search-input-wrapper">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Cari saham... (cth: BBRI.JK, AAPL)" autocomplete="off" aria-label="Cari simbol saham" role="combobox" aria-expanded="false" aria-controls="searchResults">
+                        <kbd class="search-kbd" aria-hidden="true">/</kbd>
+                    </div>
+                    <div class="search-results" id="searchResults" role="listbox" aria-label="Hasil pencarian saham"></div>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <!-- Market Status Indicator -->
+                <div class="market-status-badge" id="marketStatusBadge" title="Status pasar">
+                    <span class="market-status-dot" id="marketStatusDot"></span>
+                    <span class="market-status-text" id="marketStatusText">—</span>
+                </div>
+
+                <nav class="timeframe-buttons" id="timeframeButtons" role="group" aria-label="Pilihan timeframe chart">
+                    <button class="tf-btn" data-interval="1m" id="tf-1m" aria-pressed="false">1m</button>
+                    <button class="tf-btn" data-interval="5m" id="tf-5m" aria-pressed="false">5m</button>
+                    <button class="tf-btn" data-interval="15m" id="tf-15m" aria-pressed="false">15m</button>
+                    <button class="tf-btn" data-interval="60m" id="tf-1h" aria-pressed="false">1H</button>
+                    <button class="tf-btn active" data-interval="1d" id="tf-1d" aria-pressed="true">1D</button>
+                    <button class="tf-btn" data-interval="1wk" id="tf-1w" aria-pressed="false">1W</button>
+                    <button class="tf-btn" data-interval="1mo" id="tf-1mo" aria-pressed="false">1M</button>
+                </nav>
+
+                <!-- Pre-Order Count Badge -->
+                <button id="preorderBadgeBtn" class="btn-icon preorder-badge-btn" title="Pre-Order Aktif" aria-label="Lihat pre-order">
+                    🛒
+                    <span class="preorder-count-badge" id="preorderCountBadge" style="display:none;">0</span>
+                </button>
+
+                <button id="notifBellBtn" class="btn-icon notif-bell" title="Notifikasi Sinyal" aria-label="Toggle notifikasi">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+                </button>
+                <div class="connection-status" id="connectionStatus" role="status" aria-live="polite">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span class="status-text">Live</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Layout (Stock) -->
+        <div class="main-layout" id="stockLayout">
+            
+            <!-- Sidebar: Watchlist -->
+            <aside id="sidebar" class="sidebar" role="complementary" aria-label="Watchlist saham">
+                <div class="sidebar-header">
+                    <h2>Watchlist</h2>
+                    <button id="addWatchlistBtn" class="btn-icon" title="Tambah Saham" aria-label="Tambah saham ke watchlist">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
+                <ul id="watchlist" class="watchlist" role="listbox" aria-label="Daftar saham watchlist">
+                    <!-- Populated dynamically by JavaScript -->
+                </ul>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content" role="main">
+                <!-- Symbol Header -->
+                <div id="symbolHeader" class="symbol-header">
+                    <div class="symbol-info">
+                        <h2 id="symbolName" class="symbol-name">BBRI.JK</h2>
+                        <span id="symbolFullName" class="symbol-fullname">Bank Rakyat Indonesia</span>
+                        <span id="symbolExchange" class="symbol-exchange">JKT</span>
+                    </div>
+                    <div class="price-display">
+                        <span id="currentPrice" class="current-price mono" aria-label="Harga saat ini">4,520</span>
+                        <span id="priceChange" class="price-change positive" aria-label="Perubahan harga">+60 (+1.35%)</span>
+                    </div>
+                </div>
+
+                <!-- Combined Score Bar (Technical + Fundamental) -->
+                <div class="combined-score-bar" id="combinedScoreBar">
+                    <div class="combined-score-left">
+                        <div class="combined-score-label">
+                            <span class="combined-icon">⚡</span>
+                            <span>Skor Gabungan</span>
+                        </div>
+                        <div class="combined-score-value" id="combinedScoreValue">—</div>
+                    </div>
+                    <div class="combined-score-gauge">
+                        <div class="combined-gauge-track">
+                            <div class="combined-gauge-fill" id="combinedGaugeFill" style="width: 50%;"></div>
+                        </div>
+                        <div class="combined-gauge-labels">
+                            <span>Sell</span>
+                            <span>Netral</span>
+                            <span>Buy</span>
+                        </div>
+                    </div>
+                    <div class="combined-score-right">
+                        <div class="combined-signal-badge" id="combinedSignalBadge">NEUTRAL</div>
+                        <div class="combined-sub-scores">
+                            <span class="sub-score" id="subScoreTechnical" title="Skor Teknikal">📈 T: —</span>
+                            <span class="sub-score" id="subScoreFundamental" title="Skor Fundamental">📋 F: —</span>
+                            <span class="sub-score" id="subScoreSentiment" title="Skor Sentimen">💬 S: —</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Real-Time OHLCV Chart -->
+                <div id="chartContainer" class="chart-container">
+                    <div id="tradingview_chart" class="tradingview-chart"></div>
+                </div>
+
+                <!-- Indicator Info Bar -->
+                <div class="indicator-info-bar" id="indicatorInfoBar">
+                    <div class="info-tag">
+                        <span class="info-tag-icon">⚡</span>
+                        <span>Real-Time Chart</span>
+                    </div>
+                    <div class="info-tag">
+                        <span class="info-tag-icon">📊</span>
+                        <span>OHLCV + Volume · Data langsung dari server</span>
+                    </div>
+                    <div class="info-tag">
+                        <span class="info-tag-icon">🔄</span>
+                        <span>Auto-update setiap 15 detik</span>
+                    </div>
+                </div>
+
+                <!-- Tab Navigation for Bottom Panels -->
+                <div class="panel-tabs" id="panelTabs" role="tablist" aria-label="Panel navigation">
+                    <button class="panel-tab active" data-tab="quote" role="tab" aria-selected="true" id="tab-quote">
+                        <span class="tab-icon">📊</span>
+                        <span class="tab-label">Detail Harga</span>
+                    </button>
+                    <button class="panel-tab" data-tab="fundamental" role="tab" aria-selected="false" id="tab-fundamental">
+                        <span class="tab-icon">📋</span>
+                        <span class="tab-label">Fundamental</span>
+                    </button>
+                    <button class="panel-tab" data-tab="preorder" role="tab" aria-selected="false" id="tab-preorder">
+                        <span class="tab-icon">🛒</span>
+                        <span class="tab-label">Pre-Order</span>
+                        <span class="tab-badge" id="tabPreorderBadge" style="display:none;">0</span>
+                    </button>
+                    <button class="panel-tab" data-tab="signal" role="tab" aria-selected="false" id="tab-signal">
+                        <span class="tab-icon">🎯</span>
+                        <span class="tab-label">Sinyal</span>
+                    </button>
+                    <button class="panel-tab" data-tab="news" role="tab" aria-selected="false" id="tab-news">
+                        <span class="tab-icon">📰</span>
+                        <span class="tab-label">Berita</span>
+                    </button>
+                    <button class="panel-tab" data-tab="sentiment" role="tab" aria-selected="false" id="tab-sentiment">
+                        <span class="tab-icon">💬</span>
+                        <span class="tab-label">Sentimen</span>
+                    </button>
+                    <button class="panel-tab" data-tab="screener" role="tab" aria-selected="false" id="tab-screener">
+                        <span class="tab-icon">🔍</span>
+                        <span class="tab-label">Screener</span>
+                    </button>
+                    <button class="panel-tab" data-tab="recommendation" role="tab" aria-selected="false" id="tab-recommendation">
+                        <span class="tab-icon">📋</span>
+                        <span class="tab-label">Rekomendasi</span>
+                        <span class="tab-badge rec-new-badge">NEW</span>
+                    </button>
+                </div>
+
+                <!-- Bottom Panels -->
+                <div class="bottom-panels-tabbed">
+
+                    <!-- Quote Details Panel -->
+                    <section class="tab-panel active" data-panel="quote" id="panel-quote" role="tabpanel" aria-label="Detail harga saham">
+                        <div class="panel-body">
+                            <div class="stats-grid" id="statsGrid">
+                                <div class="stat-item" id="stat-open">
+                                    <span class="stat-label">Open</span>
+                                    <span class="stat-value mono" id="statOpen">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-high">
+                                    <span class="stat-label">High</span>
+                                    <span class="stat-value mono" id="statHigh">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-low">
+                                    <span class="stat-label">Low</span>
+                                    <span class="stat-value mono" id="statLow">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-prevclose">
+                                    <span class="stat-label">Prev Close</span>
+                                    <span class="stat-value mono" id="statPrevClose">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-volume">
+                                    <span class="stat-label">Volume</span>
+                                    <span class="stat-value mono" id="statVolume">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-marketcap">
+                                    <span class="stat-label">Market Cap</span>
+                                    <span class="stat-value mono" id="statMarketCap">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-52whigh">
+                                    <span class="stat-label">52W High</span>
+                                    <span class="stat-value mono" id="stat52wHigh">—</span>
+                                </div>
+                                <div class="stat-item" id="stat-52wlow">
+                                    <span class="stat-label">52W Low</span>
+                                    <span class="stat-value mono" id="stat52wLow">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Fundamental Analysis Panel -->
+                    <section class="tab-panel" data-panel="fundamental" id="panel-fundamental" role="tabpanel" aria-label="Analisis fundamental">
+                        <div class="panel-body">
+                            <!-- Fundamental Rating -->
+                            <div class="fundamental-header">
+                                <div class="fundamental-rating-badge" id="fundamentalRatingBadge">
+                                    <span class="rating-icon">📋</span>
+                                    <span class="rating-text" id="fundamentalRatingText">—</span>
+                                </div>
+                                <div class="fundamental-score-display">
+                                    <span class="fund-score-label">Skor Fundamental</span>
+                                    <span class="fund-score-value mono" id="fundamentalScoreValue">—</span>
+                                </div>
+                            </div>
+
+                            <!-- Fundamental Metrics Grid -->
+                            <div class="fundamental-metrics-grid" id="fundamentalMetricsGrid">
+                                <!-- Dynamically populated -->
+                                <div class="empty-state" id="fundamentalEmptyState">
+                                    <span class="empty-state-icon">📋</span>
+                                    <span class="empty-state-title">Memuat data fundamental...</span>
+                                    <span class="empty-state-text">Data akan tampil setelah memilih saham</span>
+                                </div>
+                            </div>
+
+                            <!-- Recommendation -->
+                            <div class="fundamental-recommendation" id="fundamentalRecommendation" style="display:none;">
+                                <div class="recommendation-title">💡 Rekomendasi</div>
+                                <div class="recommendation-text" id="fundamentalRecText"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Pre-Order Panel -->
+                    <section class="tab-panel" data-panel="preorder" id="panel-preorder" role="tabpanel" aria-label="Pre-order saham">
+                        <div class="panel-body">
+                            <!-- Night Mode Banner -->
+                            <div class="preorder-night-banner" id="preorderNightBanner">
+                                <div class="night-banner-icon">🌙</div>
+                                <div class="night-banner-content">
+                                    <div class="night-banner-title">Mode Pre-Order Malam</div>
+                                    <div class="night-banner-desc" id="nightBannerDesc">Pasar tutup — siapkan order untuk besok</div>
+                                </div>
+                                <div class="night-banner-time" id="nightBannerTime">—</div>
+                            </div>
+
+                            <!-- Quick Order Form -->
+                            <div class="preorder-form" id="preorderForm">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="poSymbol">Simbol</label>
+                                        <input type="text" id="poSymbol" placeholder="BBRI.JK" class="form-input mono">
+                                    </div>
+                                    <div class="form-group form-group-sm">
+                                        <label for="poType">Tipe</label>
+                                        <div class="toggle-group" id="poTypeToggle">
+                                            <button class="toggle-btn active" data-value="BUY" id="poBuyBtn">BUY</button>
+                                            <button class="toggle-btn" data-value="SELL" id="poSellBtn">SELL</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="poPrice">Target Harga</label>
+                                        <input type="number" id="poPrice" placeholder="0" class="form-input mono" step="any">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="poQty">Jumlah (Lot)</label>
+                                        <input type="number" id="poQty" placeholder="1" class="form-input mono" min="1">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="poStopLoss">Stop Loss <span class="form-optional">(opsional)</span></label>
+                                        <input type="number" id="poStopLoss" placeholder="0" class="form-input mono" step="any">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="poTakeProfit">Take Profit <span class="form-optional">(opsional)</span></label>
+                                        <input type="number" id="poTakeProfit" placeholder="0" class="form-input mono" step="any">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group form-group-full">
+                                        <label for="poNotes">Catatan <span class="form-optional">(opsional)</span></label>
+                                        <input type="text" id="poNotes" placeholder="Alasan order, target, dll..." class="form-input">
+                                    </div>
+                                </div>
+                                <div class="form-row form-actions">
+                                    <div class="preorder-total" id="preorderTotal">
+                                        <span class="total-label">Estimasi Total:</span>
+                                        <span class="total-value mono" id="preorderTotalValue">Rp 0</span>
+                                    </div>
+                                    <button class="btn-primary" id="poSubmitBtn">
+                                        <span>🛒</span> Buat Pre-Order
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Orders List -->
+                            <div class="preorder-list-header">
+                                <h4>📋 Daftar Pre-Order</h4>
+                                <div class="preorder-list-actions">
+                                    <button class="btn-text" id="poExportBtn" title="Export CSV">📥 Export</button>
+                                    <button class="btn-text" id="poClearExecutedBtn" title="Hapus yang sudah selesai">🗑 Bersihkan</button>
+                                </div>
+                            </div>
+                            <div class="preorder-list" id="preorderList">
+                                <div class="empty-state" id="preorderEmptyState">
+                                    <span class="empty-state-icon">🛒</span>
+                                    <span class="empty-state-title">Belum ada pre-order</span>
+                                    <span class="empty-state-text">Buat pre-order di atas untuk mempersiapkan transaksi</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Signal Panel -->
+                    <section class="tab-panel" data-panel="signal" id="panel-signal" role="tabpanel" aria-label="Sinyal trading">
+                        <div class="panel-body">
+                            <div id="signalBadge" class="signal-badge neutral" aria-label="Sinyal keseluruhan">NEUTRAL</div>
+                            <div id="signalGauge" class="signal-gauge" role="meter" aria-label="Gauge sinyal trading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+                                <div class="signal-gauge-needle" id="signalGaugeNeedle" style="left: 50%;"></div>
+                            </div>
+                            <div class="trend-strength-row">
+                                <span class="trend-strength-label">Kekuatan Trend:</span>
+                                <span class="trend-strength-badge" id="trendStrengthBadge">— N/A</span>
+                            </div>
+                            <div id="signalDetails" class="signal-details">
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">SMA</span>
+                                    <span class="signal-detail-value neutral" id="signalSma">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">EMA</span>
+                                    <span class="signal-detail-value neutral" id="signalEma">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">RSI</span>
+                                    <span class="signal-detail-value neutral" id="signalRsi">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">MACD</span>
+                                    <span class="signal-detail-value neutral" id="signalMacd">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">BB</span>
+                                    <span class="signal-detail-value neutral" id="signalBb">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">VOL</span>
+                                    <span class="signal-detail-value neutral" id="signalVol">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">STOCH</span>
+                                    <span class="signal-detail-value neutral" id="signalStoch">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">ADX</span>
+                                    <span class="signal-detail-value neutral" id="signalAdx">NEUTRAL</span>
+                                </div>
+                                <div class="signal-detail-item">
+                                    <span class="signal-detail-name">CROSS</span>
+                                    <span class="signal-detail-value neutral" id="signalCross">NEUTRAL</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- News Panel -->
+                    <section class="tab-panel" data-panel="news" id="panel-news" role="tabpanel" aria-label="Berita terkait saham">
+                        <div class="panel-body">
+                            <ul id="newsFeed" class="news-feed" aria-label="Daftar berita">
+                                <!-- News items populated dynamically by JavaScript -->
+                                <li class="empty-state" id="newsEmptyState">
+                                    <span class="empty-state-icon" aria-hidden="true">📰</span>
+                                    <span class="empty-state-title">Belum ada berita</span>
+                                    <span class="empty-state-text">Berita akan dimuat setelah memilih saham</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <!-- Sentiment Panel -->
+                    <section class="tab-panel" data-panel="sentiment" id="panel-sentiment" role="tabpanel" aria-label="Analisis Sentimen">
+                        <div class="panel-body">
+                            <div class="sentiment-header">
+                                <div class="sentiment-badge-container">
+                                    <div class="sentiment-overall-badge neutral" id="sentimentOverallBadge">NEUTRAL</div>
+                                    <div class="sentiment-method-badge" id="sentimentMethodBadge">Menganalisis...</div>
+                                </div>
+                                <div class="sentiment-score-display">
+                                    <span class="sentiment-score-label">Skor Sentimen</span>
+                                    <span class="sentiment-score-value mono" id="sentimentScoreValue">—</span>
+                                </div>
+                            </div>
+                            
+                            <div class="sentiment-gauge-container">
+                                <div class="sentiment-gauge-track">
+                                    <div class="sentiment-gauge-fill" id="sentimentGaugeFill" style="width: 50%;"></div>
+                                </div>
+                                <div class="sentiment-gauge-labels">
+                                    <span>Negatif</span>
+                                    <span>Netral</span>
+                                    <span>Positif</span>
+                                </div>
+                            </div>
+
+                            <div class="sentiment-articles-container">
+                                <h4>Analisis Berita Terbaru</h4>
+                                <div class="sentiment-articles-list" id="sentimentArticlesList">
+                                    <div class="empty-state">
+                                        <span class="empty-state-icon">💬</span>
+                                        <span class="empty-state-title">Memuat data sentimen...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Screener Panel -->
+                    <section class="tab-panel" data-panel="screener" id="panel-screener" role="tabpanel" aria-label="Stock Screener">
+                        <div class="panel-body screener-panel">
+                            <!-- Screener Header -->
+                            <div class="screener-header">
+                                <div class="screener-title-row">
+                                    <h3 class="screener-title">🔍 Stock Screener</h3>
+                                    <div class="screener-actions">
+                                        <button class="btn-screener-action" id="screenerAddSymbolBtn" title="Tambah Saham">➕ Saham</button>
+                                        <button class="btn-screener-action" id="screenerExportBtn" title="Export CSV">📥 Export</button>
+                                        <button class="btn-screener-action" id="screenerResetBtn" title="Reset Filter">🔄 Reset</button>
+                                        <button class="btn-screener-primary" id="screenerScanBtn">🔍 Scan Saham</button>
+                                    </div>
+                                </div>
+
+                                <!-- Presets -->
+                                <div class="screener-presets" id="screenerPresets"></div>
+
+                                <!-- Filter Bar -->
+                                <div class="screener-filter-bar">
+                                    <button class="screener-add-filter-btn" id="screenerAddFilterBtn">+ Tambah Filter</button>
+                                    <div class="screener-active-filters" id="screenerActiveFilters">
+                                        <span class="screener-no-filters">Tidak ada filter aktif — tampilkan semua</span>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="screener-progress" id="screenerProgress" style="display:none;">
+                                    <div class="screener-progress-track">
+                                        <div class="screener-progress-fill" id="screenerProgressFill"></div>
+                                    </div>
+                                    <span class="screener-progress-text" id="screenerProgressText">0 / 0</span>
+                                </div>
+                            </div>
+
+                            <!-- Table Container -->
+                            <div class="screener-table-container" id="screenerTableContainer">
+                                <div class="screener-empty-state">
+                                    <span class="empty-state-icon">🔍</span>
+                                    <span class="empty-state-title">Belum ada data screening</span>
+                                    <span class="empty-state-text">Klik tombol "Scan Saham" untuk memulai screening</span>
+                                </div>
+                            </div>
+
+                            <!-- Status Bar -->
+                            <div class="screener-status-bar" id="screenerStatus"></div>
+                        </div>
+                    </section>
+
+                    <!-- Recommendation Panel -->
+                    <section class="tab-panel" data-panel="recommendation" id="panel-recommendation" role="tabpanel" aria-label="Rekomendasi Saham">
+                        <div class="panel-body recommendation-panel">
+                            <!-- Today Recommendations -->
+                            <div class="rec-block">
+                                <div class="rec-block-header">
+                                    <div class="rec-block-title-group">
+                                        <h3 class="rec-block-title">📊 Rekomendasi Saham Hari Ini</h3>
+                                        <span class="rec-block-subtitle">Analisis real-time saham blue chip IDX</span>
+                                    </div>
+                                    <button class="rec-refresh-btn" id="recRefreshTodayBtn" title="Refresh">
+                                        🔄 Refresh
+                                    </button>
+                                </div>
+                                <div class="rec-content" id="recTodayContent">
+                                    <div class="rec-empty-state">
+                                        <span class="rec-empty-icon">📋</span>
+                                        <span class="rec-empty-title">Belum ada rekomendasi</span>
+                                        <span class="rec-empty-text">Klik tab Rekomendasi untuk memuat analisis</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tomorrow Recommendations -->
+                            <div class="rec-block rec-block-tomorrow">
+                                <div class="rec-block-header">
+                                    <div class="rec-block-title-group">
+                                        <h3 class="rec-block-title">🌅 Rekomendasi Besok Pagi</h3>
+                                        <span class="rec-block-subtitle">Tersedia mulai pukul 19:00 WIB · Analisis end-of-day</span>
+                                    </div>
+                                    <button class="rec-refresh-btn" id="recRefreshTomorrowBtn" title="Refresh">
+                                        🔄 Refresh
+                                    </button>
+                                </div>
+                                <div class="rec-content" id="recTomorrowContent">
+                                    <div class="rec-empty-state">
+                                        <span class="rec-empty-icon">🌙</span>
+                                        <span class="rec-empty-title">Memuat status...</span>
+                                        <span class="rec-empty-text">Rekomendasi besok pagi tersedia setelah pukul 19:00 WIB</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </main>
+        </div>
+
+    <!-- Scripts -->
+
+    <script src="/js/indicators.js"></script>
+    <script src="/js/signals.js"></script>
+    <script src="/js/fundamental.js"></script>
+    <script src="/js/sentiment.js"></script>
+    <script src="/js/preorder.js"></script>
+    <script src="/js/screener.js"></script>
+    <script src="/js/recommendation.js"></script>
+    <script src="/js/app.js"></script>
+
+    <!-- Screener Filter Modal -->
+    <div class="screener-filter-modal" id="screenerFilterModal">
+        <div class="filter-modal-content">
+            <div class="filter-modal-header">
+                <h3>📊 Tambah Filter</h3>
+                <button class="btn-icon" id="filterModalCancel" title="Tutup">×</button>
+            </div>
+            <div class="filter-modal-body">
+                <div class="filter-modal-field">
+                    <label for="filterMetricSelect">Metrik</label>
+                    <select id="filterMetricSelect" class="filter-modal-select"></select>
+                </div>
+                <div class="filter-modal-field">
+                    <label for="filterOpSelect">Kondisi</label>
+                    <select id="filterOpSelect" class="filter-modal-select">
+                        <option value=">=">&ge; Minimal</option>
+                        <option value="<=">&le; Maksimal</option>
+                        <option value=">"> &gt; Lebih dari</option>
+                        <option value="<"> &lt; Kurang dari</option>
+                    </select>
+                </div>
+                <div class="filter-modal-field">
+                    <label for="filterValueInput">Nilai</label>
+                    <input type="number" id="filterValueInput" class="filter-modal-input" placeholder="0" step="any">
+                    <select id="filterValueSelect" class="filter-modal-select" style="display:none;"></select>
+                </div>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="btn-screener-action" id="filterModalCancel2" onclick="document.getElementById('screenerFilterModal').classList.remove('active')">Batal</button>
+                <button class="btn-screener-primary" id="filterModalApply">Terapkan Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+    <!-- Notification Panel -->
+    <div id="notifPanel" class="notif-panel" style="display:none;">
+        <div class="notif-panel-header">
+            <h3>🔔 Notifikasi Sinyal</h3>
+            <button id="notifCloseBtn" class="btn-icon" title="Tutup">×</button>
+        </div>
+        <div id="notifList" class="notif-list">
+            <div class="empty-state">
+                <span class="empty-state-icon">🔕</span>
+                <span class="empty-state-title">Belum ada notifikasi</span>
+                <span class="empty-state-text">Notifikasi akan muncul saat ada sinyal STRONG BUY atau STRONG SELL</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
