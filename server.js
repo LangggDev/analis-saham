@@ -236,13 +236,23 @@ app.get('/api/quote/:symbol', async (req, res) => {
       yahooCall(async () => {
         const chart = await fetchChartData(symbol, '1d', '5d');
         const meta = chart.meta;
-        const previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
-        const price = meta.regularMarketPrice ?? 0;
+        const closes = (chart.indicators?.quote?.[0]?.close || []).filter(c => c != null);
+
+        let price = meta.regularMarketPrice ?? 0;
+        let previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+
+        if (closes.length >= 2) {
+          price = closes[closes.length - 1];
+          previousClose = closes[closes.length - 2];
+        } else if (closes.length === 1) {
+          price = closes[0];
+        }
+
         const change = price - previousClose;
         const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
 
         return {
-          symbol: meta.symbol,
+          symbol: meta.symbol || symbol,
           name: meta.shortName || meta.longName || symbol,
           price,
           change,
@@ -267,6 +277,7 @@ app.get('/api/quote/:symbol', async (req, res) => {
     res.status(500).json({ error: `Failed to fetch quote for ${symbol}`, details: err.message });
   }
 });
+
 
 // ─── API: Chart ─────────────────────────────────────────────────────────────
 app.get('/api/chart/:symbol', async (req, res) => {
@@ -788,16 +799,25 @@ async function analyzeStockForRecommendation(symbol) {
       yahooCall(async () => {
         const chart = await fetchChartData(symbol, '1d', '5d');
         const meta = chart.meta;
+        const closes = (chart.indicators?.quote?.[0]?.close || []).filter(c => c != null);
+        let price = meta.regularMarketPrice ?? 0;
+        let previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+        if (closes.length >= 2) {
+          price = closes[closes.length - 1];
+          previousClose = closes[closes.length - 2];
+        } else if (closes.length === 1) {
+          price = closes[0];
+        }
+        const change = price - previousClose;
+        const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
         return {
-          symbol: meta.symbol,
+          symbol: meta.symbol || symbol,
           name: meta.shortName || meta.longName || symbol,
-          price: meta.regularMarketPrice ?? 0,
-          change: (meta.regularMarketPrice ?? 0) - (meta.chartPreviousClose ?? 0),
-          changePercent: meta.chartPreviousClose > 0
-            ? (((meta.regularMarketPrice ?? 0) - meta.chartPreviousClose) / meta.chartPreviousClose) * 100
-            : 0,
+          price,
+          change,
+          changePercent,
           volume: meta.regularMarketVolume ?? 0,
-          previousClose: meta.chartPreviousClose ?? 0,
+          previousClose,
           dayHigh: meta.regularMarketDayHigh ?? 0,
           dayLow: meta.regularMarketDayLow ?? 0,
           fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? 0,
@@ -805,6 +825,7 @@ async function analyzeStockForRecommendation(symbol) {
           exchange: meta.exchangeName || '',
         };
       }),
+
     ]);
 
     const timestamps = chartResult.timestamp || [];
