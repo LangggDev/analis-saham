@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
@@ -13,10 +15,36 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Disable X-Powered-By header for security
+app.disable('x-powered-by');
+
+// Security Headers Middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // allow loading CDNs/scripts used in public/index.html
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// Rate Limiter: Prevent abuse/DDoS on API endpoints (200 requests per 15 mins per IP)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan. Silakan coba lagi beberapa saat.' }
+});
+
 // ─── Middleware ──────────────────────────────────────────────────────────────
+app.use('/api/', apiLimiter);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '500kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Input Sanitizer Helper
+function sanitizeSymbol(input) {
+  if (typeof input !== 'string') return '';
+  return input.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '').slice(0, 15);
+}
+
 
 // ─── Yahoo Finance HTTP Client ──────────────────────────────────────────────
 // v8/chart endpoint works without crumb authentication
