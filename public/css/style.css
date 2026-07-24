@@ -4720,235 +4720,6 @@ body {
 }
 
 /* ============================================
-   Global Responsive Breakpoint Rules
-   ============================================ */
-
-/* --- Tablet / Mobile Header & Navigation (< 768px) --- */
-@media (max-width: 768px) {
-  .header {
-    flex-wrap: wrap;
-    padding: 8px 12px;
-    gap: 8px;
-  }
-
-  .header-left {
-    gap: 8px;
-  }
-
-  .logo h1 {
-    font-size: 1.05rem;
-  }
-
-  .header-center {
-    order: 3;
-    width: 100%;
-    max-width: 100%;
-    margin-top: 4px;
-  }
-
-  #searchInput {
-    padding: 6px 32px 6px 34px;
-    font-size: 0.82rem;
-  }
-
-  .header-right {
-    gap: 6px;
-    margin-left: auto;
-  }
-
-  .timeframe-buttons {
-    max-width: 180px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .timeframe-buttons::-webkit-scrollbar {
-    display: none;
-  }
-
-  .tf-btn {
-    padding: 4px 8px;
-    font-size: 0.7rem;
-  }
-
-  .market-status-badge {
-    padding: 4px 8px;
-    font-size: 0.65rem;
-  }
-
-  .connection-status {
-    display: none;
-  }
-
-  /* Symbol Header */
-  .symbol-header {
-    padding: 12px 14px;
-  }
-
-  .symbol-name {
-    font-size: 1.25rem;
-  }
-
-  .symbol-fullname {
-    font-size: 0.8rem;
-  }
-
-  .current-price {
-    font-size: 1.35rem;
-  }
-
-  .price-change {
-    font-size: 0.82rem;
-  }
-
-  /* Combined Score Bar */
-  .combined-score-bar {
-    padding: 10px 14px;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .combined-score-left,
-  .combined-score-right {
-    justify-content: space-between;
-    width: 100%;
-  }
-
-  .combined-score-gauge {
-    width: 100%;
-    margin: 4px 0;
-  }
-
-  /* Chart Container */
-  .chart-container {
-    height: 320px !important;
-  }
-
-  /* Panel Tabs Horizontal Touch Scroll */
-  .panel-tabs {
-    padding: 6px 12px;
-    gap: 4px;
-  }
-
-  .panel-tab {
-    padding: 6px 10px;
-    font-size: 0.78rem;
-  }
-
-  .tab-icon {
-    font-size: 0.9rem;
-  }
-
-  /* Stats Grid */
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .stat-item {
-    padding: 8px 10px;
-  }
-
-  .stat-label {
-    font-size: 0.68rem;
-  }
-
-  .stat-value {
-    font-size: 0.85rem;
-  }
-
-  /* Fundamental Panel */
-  .fundamental-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .fundamental-metrics-grid {
-    grid-template-columns: 1fr !important;
-    gap: 10px;
-    padding: 12px;
-  }
-
-  /* Screener */
-  .screener-header {
-    padding: 12px;
-  }
-
-  .screener-title-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .screener-actions {
-    flex-wrap: wrap;
-    width: 100%;
-  }
-
-  .screener-actions button {
-    flex: 1;
-    text-align: center;
-    justify-content: center;
-  }
-
-  /* Pre-Order Form */
-  .preorder-form {
-    padding: 14px;
-  }
-
-  .form-row {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .form-group-sm {
-    width: 100%;
-  }
-}
-
-/* --- Small Mobile Phones (< 480px) --- */
-@media (max-width: 480px) {
-  .logo h1 {
-    font-size: 0.95rem;
-  }
-
-  .mobile-btn-text {
-    display: none;
-  }
-
-  .mobile-watchlist-btn {
-    padding: 6px 8px;
-  }
-
-  .chart-container {
-    height: 280px !important;
-  }
-
-  .symbol-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .price-display {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .rec-card {
-    padding: 12px;
-  }
-
-  .rec-card-price {
-    font-size: 1.1rem;
-  }
-}
-
-/* ============================================
    Stockbit Style IDX Sector Cards Grid
    ============================================ */
 .screener-sectors-wrapper {
@@ -5077,4 +4848,326 @@ body {
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
   font-family: var(--font-mono);
+}
+
+/* ============================================
+   Comprehensive Mobile & Tablet Responsive Engine
+   ============================================ */
+
+/* --- Tablets & Small Laptops (< 1024px) --- */
+@media (max-width: 1024px) {
+  body {
+    overflow-y: auto !important;
+    height: auto !important;
+  }
+
+  .app-container {
+    height: auto !important;
+    min-height: 100vh;
+    overflow: visible !important;
+  }
+
+  .main-content {
+    flex-direction: column;
+    overflow: visible !important;
+  }
+
+  .content {
+    overflow-y: visible !important;
+    height: auto !important;
+  }
+
+  .mobile-watchlist-btn {
+    display: inline-flex !important;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    width: 280px;
+    height: 100vh;
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-xl);
+    background: var(--bg-card);
+  }
+
+  .sidebar.active {
+    transform: translateX(300px);
+  }
+}
+
+/* --- Tablets & Mobile Phones (< 768px) --- */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .header-center {
+    width: 100%;
+    max-width: 100%;
+    margin-top: 2px;
+  }
+
+  #searchInput {
+    padding: 8px 36px 8px 36px;
+    font-size: 0.88rem;
+    height: 40px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 8px;
+  }
+
+  .timeframe-buttons {
+    flex: 1;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .timeframe-buttons::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tf-btn {
+    padding: 6px 12px;
+    font-size: 0.78rem;
+  }
+
+  .market-status-badge {
+    padding: 5px 10px;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+  }
+
+  /* Symbol Header */
+  .symbol-header {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .price-display {
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .current-price {
+    font-size: 1.6rem;
+  }
+
+  .price-change {
+    font-size: 0.85rem;
+  }
+
+  /* Combined Score Bar */
+  .combined-score-bar {
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .combined-score-left,
+  .combined-score-right {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .combined-sub-scores {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Chart Header Bar & Mode Toggle */
+  .chart-header-bar {
+    padding: 8px 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .chart-mode-toggle {
+    width: 100%;
+    display: flex;
+  }
+
+  .chart-mode-btn {
+    flex: 1;
+    text-align: center;
+    padding: 8px 6px;
+    font-size: 0.75rem;
+  }
+
+  .chart-status-tag {
+    justify-content: center;
+  }
+
+  /* Chart Container */
+  .chart-container {
+    min-height: 380px !important;
+    height: 380px !important;
+  }
+
+  .chart-viewport {
+    min-height: 380px !important;
+    height: 380px !important;
+  }
+
+  /* Sector Cards Grid on Mobile (3 Columns) */
+  .screener-sectors-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .screener-sector-card {
+    padding: 10px 6px !important;
+  }
+
+  .sector-card-icon-wrap {
+    width: 40px !important;
+    height: 40px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .sector-card-emoji {
+    font-size: 1.2rem !important;
+  }
+
+  .sector-card-title {
+    font-size: 0.7rem !important;
+  }
+
+  .sector-card-pct {
+    font-size: 0.7rem !important;
+  }
+
+  /* Panel Tabs Horizontal Touch Scroll */
+  .panel-tabs {
+    padding: 8px 10px;
+    gap: 6px;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .panel-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .panel-tab {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    min-height: 42px;
+  }
+
+  /* Recommendation Cards Grid */
+  .rec-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .rec-card-levels {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* Screener Actions */
+  .screener-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .screener-actions button {
+    width: 100% !important;
+    padding: 8px 10px !important;
+    font-size: 0.78rem !important;
+  }
+
+  /* Fundamental Grid */
+  .fundamental-metrics-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* --- Smartphones (< 480px) --- */
+@media (max-width: 480px) {
+  .logo h1 {
+    font-size: 0.95rem;
+  }
+
+  .chart-container {
+    min-height: 340px !important;
+    height: 340px !important;
+  }
+
+  .chart-viewport {
+    min-height: 340px !important;
+    height: 340px !important;
+  }
+
+  /* Sector Cards Grid on Small Phones (2 Columns) */
+  .screener-sectors-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .screener-sector-card {
+    padding: 8px 4px !important;
+  }
+
+  .symbol-name {
+    font-size: 1.15rem;
+  }
+
+  .current-price {
+    font-size: 1.35rem;
+  }
+
+  .price-change {
+    font-size: 0.78rem;
+    padding: 3px 6px;
+  }
+
+  .rec-card {
+    padding: 12px;
+  }
+
+  .rec-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .rec-card-badge {
+    align-self: flex-start;
+  }
 }
