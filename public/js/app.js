@@ -1063,6 +1063,12 @@ class App {
     async loadSymbol(symbol) {
         this.currentSymbol = symbol;
 
+        // Auto-close mobile sidebar drawer
+        const sidebar = document.getElementById('sidebar');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        if (sidebar) sidebar.classList.remove('active');
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+
         // Update chart
         await this.tvChart.changeSymbol(symbol);
 
@@ -1876,19 +1882,29 @@ class App {
         const dropdown = document.getElementById('searchResults');
         if (!input || !dropdown) return;
 
+        const hideDropdown = () => {
+            dropdown.classList.remove('visible');
+            dropdown.classList.remove('active');
+        };
+
+        const showDropdown = () => {
+            dropdown.classList.add('visible');
+            dropdown.classList.add('active');
+        };
+
         input.addEventListener('input', () => {
             clearTimeout(this._searchTimeout);
             const q = input.value.trim();
             if (q.length < 1) {
-                dropdown.classList.remove('visible');
+                hideDropdown();
                 return;
             }
             this._searchTimeout = setTimeout(async () => {
                 try {
                     const results = await DataService.searchSymbol(q);
-                    this._renderSearchResults(results, dropdown);
+                    this._renderSearchResults(results, dropdown, showDropdown, hideDropdown);
                 } catch (_) {
-                    dropdown.classList.remove('visible');
+                    hideDropdown();
                 }
             }, 300);
         });
@@ -1898,12 +1914,12 @@ class App {
                 const q = input.value.trim().toUpperCase();
                 if (q) {
                     this.loadSymbol(q);
-                    dropdown.classList.remove('visible');
+                    hideDropdown();
                     input.blur();
                 }
             }
             if (e.key === 'Escape') {
-                dropdown.classList.remove('visible');
+                hideDropdown();
                 input.blur();
             }
         });
@@ -1911,15 +1927,15 @@ class App {
         // Close dropdown on outside click
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.search-container')) {
-                dropdown.classList.remove('visible');
+                hideDropdown();
             }
         });
     }
 
-    _renderSearchResults(results, dropdown) {
+    _renderSearchResults(results, dropdown, showDropdown, hideDropdown) {
         const items = Array.isArray(results) ? results : (results.quotes ?? results.results ?? []);
         if (!items.length) {
-            dropdown.classList.remove('visible');
+            if (hideDropdown) hideDropdown();
             return;
         }
         dropdown.innerHTML = items.slice(0, 8).map(r => {
@@ -1928,20 +1944,20 @@ class App {
             const exchange = r.exchange ?? r.exchDisp ?? '';
             return `
                 <div class="search-result-item" data-symbol="${sym}">
-                    <span class="search-result-symbol">${sym}</span>
-                    <span class="search-result-name">${name}</span>
-                    <span class="search-result-exchange">${exchange}</span>
+                    <span class="search-result-symbol result-symbol">${sym}</span>
+                    <span class="search-result-name result-name">${name}</span>
+                    <span class="search-result-exchange result-exchange">${exchange}</span>
                 </div>
             `;
         }).join('');
 
-        dropdown.classList.add('visible');
+        if (showDropdown) showDropdown();
 
         dropdown.querySelectorAll('.search-result-item').forEach(el => {
             el.addEventListener('click', () => {
                 const sym = el.dataset.symbol;
                 this.loadSymbol(sym);
-                dropdown.classList.remove('visible');
+                if (hideDropdown) hideDropdown();
                 document.getElementById('searchInput').value = '';
             });
         });
