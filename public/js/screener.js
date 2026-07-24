@@ -7,30 +7,143 @@
 
 const StockScreener = {
 
-    // ─── Default IDX Stock List (100+ Top Indonesian Stocks) ───────────
-    DEFAULT_SYMBOLS: [
-        // Perbankan & Keuangan
-        'BBRI.JK', 'BBCA.JK', 'BMRI.JK', 'BBNI.JK', 'BRIS.JK', 'ARTO.JK', 'BBHI.JK', 'BNGA.JK', 'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'BTPS.JK', 'NISP.JK', 'PNLF.JK', 'BFIN.JK', 'SRTG.JK',
-        // Energi & Tambang
-        'ADRO.JK', 'PTBA.JK', 'ANTM.JK', 'INCO.JK', 'MDKA.JK', 'PGAS.JK', 'MEDC.JK', 'AKRA.JK', 'ESSA.JK', 'AMMN.JK', 'BREN.JK', 'CUAN.JK', 'PGEO.JK', 'NCKL.JK', 'MBMA.JK', 'HRUM.JK', 'ITMG.JK', 'DOID.JK', 'INDY.JK', 'PTRO.JK',
-        // Telekomunikasi & Menara
-        'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK', 'FREN.JK',
-        // Otomotif & Alat Berat
-        'ASII.JK', 'AUTO.JK', 'DRMA.JK', 'UNTR.JK', 'HEXA.JK', 'GGRM.JK', 'HMSP.JK',
-        // Konsumer & Kesehatan
-        'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'KLBF.JK', 'CPIN.JK', 'JPFA.JK', 'SIDO.JK', 'CMRY.JK', 'CLEO.JK', 'MYOR.JK', 'AMRT.JK', 'KAEF.JK', 'MIKA.JK', 'HEAL.JK', 'SILO.JK',
-        // Properti, Semen & Konstruksi
-        'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'ASRI.JK', 'SMGR.JK', 'INTP.JK', 'PTPP.JK', 'WIKA.JK', 'ADHI.JK',
-        // Teknologi & Media
-        'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'SCMA.JK', 'MNCN.JK',
-        // Perdagangan, Retail & Logistik
-        'ACES.JK', 'MAPI.JK', 'MAPA.JK', 'ERAA.JK', 'RALS.JK', 'LPPF.JK', 'BIRD.JK', 'SMDR.JK',
-        // Kimia & Bahan Baku
-        'BRPT.JK', 'TPIA.JK', 'INKP.JK', 'TKIM.JK', 'AVIA.JK'
-    ],
+    // ─── 11 Official IDX Sectors (Stockbit Category Classification) ───
+    IDX_SECTORS: {
+        'BASIC-IND': {
+            name: 'Basic Materials',
+            icon: '🧪',
+            symbols: [
+                'BRPT.JK', 'TPIA.JK', 'INKP.JK', 'TKIM.JK', 'ANTM.JK', 'INCO.JK', 'MDKA.JK', 'NCKL.JK',
+                'MBMA.JK', 'SMGR.JK', 'INTP.JK', 'AVIA.JK', 'TINS.JK', 'PSAB.JK', 'DKFT.JK', 'NIKL.JK',
+                'CITA.JK', 'SMCB.JK', 'SMBR.JK', 'ARCI.JK', 'IFSH.JK', 'MCOL.JK', 'SOLA.JK', 'AGII.JK',
+                'ALDO.JK', 'AMFG.JK', 'BTON.JK', 'FASW.JK', 'GDST.JK', 'INCF.JK', 'ISSP.JK', 'KRAS.JK',
+                'LION.JK', 'LMSH.JK', 'PBSA.JK', 'TDPM.JK', 'TRST.JK', 'UNIC.JK'
+            ]
+        },
+        'ENERGY': {
+            name: 'Energy',
+            icon: '🔥',
+            symbols: [
+                'ADRO.JK', 'PTBA.JK', 'PGAS.JK', 'MEDC.JK', 'AKRA.JK', 'ESSA.JK', 'AMMN.JK', 'BREN.JK',
+                'CUAN.JK', 'PGEO.JK', 'HRUM.JK', 'ITMG.JK', 'DOID.JK', 'INDY.JK', 'PTRO.JK', 'BYAN.JK',
+                'GEMS.JK', 'BUMI.JK', 'ELSA.JK', 'MBSS.JK', 'ENRG.JK', 'TOBA.JK', 'ABMM.JK', 'APEX.JK',
+                'ARTI.JK', 'BIPI.JK', 'BSSR.JK', 'DEWA.JK', 'FIRE.JK', 'GTBO.JK', 'IATA.JK', 'KOBX.JK',
+                'MYOH.JK', 'RUIS.JK', 'SMMT.JK', 'SURE.JK', 'TEBE.JK', 'WINS.JK'
+            ]
+        },
+        'CYCLICAL': {
+            name: 'Consumer Cyclicals',
+            icon: '👕',
+            symbols: [
+                'ACES.JK', 'MAPI.JK', 'MAPA.JK', 'ERAA.JK', 'RALS.JK', 'LPPF.JK', 'AUTO.JK', 'DRMA.JK',
+                'ASLC.JK', 'MPPA.JK', 'CINT.JK', 'WOOD.JK', 'PANR.JK', 'SCMA.JK', 'MNCN.JK', 'MSIN.JK',
+                'MDIA.JK', 'BELL.JK', 'BIKA.JK', 'BIPP.JK', 'BLTZ.JK', 'BOLA.JK', 'CSAP.JK', 'DFAM.JK',
+                'FAST.JK', 'FILM.JK', 'GLOB.JK', 'HERO.JK', 'KOCI.JK', 'MABA.JK'
+            ]
+        },
+        'FINANCE': {
+            name: 'Finance',
+            icon: '🪙',
+            symbols: [
+                'BBRI.JK', 'BBCA.JK', 'BMRI.JK', 'BBNI.JK', 'BRIS.JK', 'ARTO.JK', 'BBHI.JK', 'BNGA.JK',
+                'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'BTPS.JK', 'NISP.JK', 'PNLF.JK', 'BFIN.JK', 'SRTG.JK',
+                'BBTN.JK', 'AGRO.JK', 'BCIC.JK', 'BNLI.JK', 'BSIM.JK', 'MAHA.JK', 'MFIN.JK', 'CFIN.JK',
+                'AMAG.JK', 'BABP.JK', 'BACA.JK', 'BBKP.JK', 'BBMD.JK', 'BCAP.JK', 'BEKS.JK', 'BGTG.JK',
+                'BINA.JK', 'BNBA.JK', 'BNII.JK', 'BSWD.JK', 'BTPN.JK', 'DNAR.JK', 'MASB.JK'
+            ]
+        },
+        'INFRASTRUC': {
+            name: 'Infrastructure',
+            icon: '🛣️',
+            symbols: [
+                'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK', 'FREN.JK', 'CENT.JK',
+                'GHON.JK', 'GOLD.JK', 'META.JK', 'CMNP.JK', 'KEEN.JK', 'POWR.JK', 'TGRA.JK', 'ACST.JK',
+                'BALI.JK', 'BPII.JK', 'BUKK.JK', 'DADA.JK', 'IBST.JK', 'IDPR.JK', 'KBLV.JK', 'LINK.JK',
+                'MCTA.JK', 'MTPS.JK', 'PPRE.JK', 'SSIA.JK', 'SUPR.JK', 'TLDN.JK'
+            ]
+        },
+        'HEALTH': {
+            name: 'Healthcare',
+            icon: '🏥',
+            symbols: [
+                'KLBF.JK', 'KAEF.JK', 'MIKA.JK', 'HEAL.JK', 'SILO.JK', 'SIDO.JK', 'INAF.JK', 'SAME.JK',
+                'PRDA.JK', 'TSPC.JK', 'PEHA.JK', 'DVLA.JK', 'PYFA.JK', 'BMHS.JK', 'CARE.JK', 'DGNS.JK',
+                'MEDS.JK', 'OMED.JK', 'PRAY.JK', 'PRIM.JK', 'RDTX.JK', 'SCPI.JK'
+            ]
+        },
+        'INDUSTRIAL': {
+            name: 'Industrials',
+            icon: '🏭',
+            symbols: [
+                'ASII.JK', 'UNTR.JK', 'HEXA.JK', 'PTPP.JK', 'WIKA.JK', 'ADHI.JK', 'WEGE.JK', 'TOTL.JK',
+                'MARK.JK', 'IMPC.JK', 'KBLI.JK', 'JECC.JK', 'ARNA.JK', 'BHIT.JK', 'CCSI.JK', 'GMFI.JK',
+                'INAI.JK', 'KBLM.JK', 'KMTR.JK', 'KPII.JK', 'SPTO.JK'
+            ]
+        },
+        'NON-CYCLICAL': {
+            name: 'Consumer Non-Cyclicals',
+            icon: '🛒',
+            symbols: [
+                'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'CPIN.JK', 'JPFA.JK', 'CMRY.JK', 'CLEO.JK', 'MYOR.JK',
+                'AMRT.JK', 'GGRM.JK', 'HMSP.JK', 'STTP.JK', 'AALI.JK', 'LSIP.JK', 'TAPG.JK', 'DSNG.JK',
+                'SSMS.JK', 'BWPT.JK', 'SIMP.JK', 'VICI.JK', 'MAIN.JK', 'BEEF.JK', 'BTEK.JK', 'CEKA.JK',
+                'DLTA.JK', 'DMND.JK', 'FOOD.JK', 'GOOD.JK', 'HOKI.JK', 'IKAN.JK', 'KEJU.JK'
+            ]
+        },
+        'PROPERTY': {
+            name: 'Property & Real Estate',
+            icon: '🏠',
+            symbols: [
+                'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'ASRI.JK', 'APLN.JK', 'DUTI.JK', 'MKPI.JK',
+                'DILD.JK', 'KIJA.JK', 'BEST.JK', 'LPKR.JK', 'LPCK.JK', 'PPRO.JK', 'JRPT.JK', 'BKSL.JK',
+                'ARMY.JK', 'BAPA.JK', 'BBSS.JK', 'BCIP.JK', 'CITY.JK', 'COWL.JK', 'CPRI.JK', 'DMAS.JK',
+                'ELTY.JK', 'FMII.JK', 'FORZ.JK', 'GAMA.JK', 'GPRA.JK', 'GWSA.JK', 'IPAC.JK'
+            ]
+        },
+        'TRANSPORT': {
+            name: 'Transportation & Logistics',
+            icon: '✈️',
+            symbols: [
+                'BIRD.JK', 'SMDR.JK', 'ASSA.JK', 'TMAS.JK', 'HELI.JK', 'HAIS.JK', 'GIAA.JK', 'CMPP.JK',
+                'IPCC.JK', 'IPCM.JK', 'SAFE.JK', 'BPTR.JK', 'TRUK.JK', 'WEHA.JK', 'AKSI.JK', 'BLTA.JK',
+                'CASS.JK', 'DEAL.JK', 'HITS.JK', 'JKSW.JK', 'LEAD.JK', 'LRNA.JK'
+            ]
+        },
+        'TECHNOLOGY': {
+            name: 'Technology',
+            icon: '💻',
+            symbols: [
+                'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'MLPT.JK', 'DCII.JK', 'MTDL.JK', 'WIFI.JK', 'BELI.JK',
+                'AXIO.JK', 'MCAS.JK', 'NFCX.JK', 'DMMX.JK', 'ENVY.JK', 'ATIC.JK', 'CASH.JK', 'DIVA.JK',
+                'GLVA.JK', 'HDIT.JK', 'JSPT.JK', 'LUCK.JK', 'MTECH.JK', 'PTSN.JK', 'WIRE.JK'
+            ]
+        }
+    },
+
+    // ─── Get Default Symbols (Covering all 11 sectors) ───────────────
+    get DEFAULT_SYMBOLS() {
+        const set = new Set();
+        Object.values(this.IDX_SECTORS).forEach(sec => {
+            sec.symbols.forEach(sym => set.add(sym));
+        });
+        return Array.from(set);
+    },
+
+    // Helper: Lookup Sector for a given symbol
+    getSectorForSymbol(symbol) {
+        if (!symbol) return 'BASIC-IND';
+        const sym = symbol.toUpperCase().trim();
+        for (const [sectorKey, sectorObj] of Object.entries(this.IDX_SECTORS)) {
+            if (sectorObj.symbols.includes(sym)) {
+                return sectorKey;
+            }
+        }
+        return 'BASIC-IND'; // fallback
+    },
 
     // ─── Filter Definitions ────────────────────────────────────────────
     FILTER_DEFS: [
+        { key: 'sector', label: 'Sektor IDX', type: 'select', options: ['BASIC-IND', 'ENERGY', 'CYCLICAL', 'FINANCE', 'INFRASTRUC', 'HEALTH', 'INDUSTRIAL', 'NON-CYCLICAL', 'PROPERTY', 'TRANSPORT', 'TECHNOLOGY'], group: 'Umum' },
         { key: 'per', label: 'PER', type: 'range', unit: 'x', group: 'Fundamental' },
         { key: 'pbv', label: 'PBV', type: 'range', unit: 'x', group: 'Fundamental' },
         { key: 'roe', label: 'ROE', type: 'range', unit: '%', isPercent: true, group: 'Fundamental' },
@@ -98,20 +211,20 @@ const StockScreener = {
 
     // ─── Column Definitions for Table ──────────────────────────────────
     COLUMNS: [
-        { key: 'symbol', label: 'Simbol', type: 'text', width: '100px' },
-        { key: 'name', label: 'Nama', type: 'text', width: '140px' },
-        { key: 'price', label: 'Harga', type: 'price', width: '90px' },
-        { key: 'changePercent', label: 'Chg%', type: 'percent', width: '80px' },
-        { key: 'volume', label: 'Volume', type: 'volume', width: '90px' },
-        { key: 'marketCap', label: 'M.Cap', type: 'bignum', width: '90px' },
-        { key: 'per', label: 'PER', type: 'number', width: '70px' },
-        { key: 'pbv', label: 'PBV', type: 'number', width: '70px' },
-        { key: 'roe', label: 'ROE', type: 'percent', width: '70px' },
-        { key: 'der', label: 'DER', type: 'number', width: '70px' },
-        { key: 'dividendYield', label: 'Div%', type: 'percent', width: '70px' },
-        { key: 'profitMargin', label: 'Margin', type: 'percent', width: '75px' },
-        { key: 'fundamentalScore', label: 'F.Skor', type: 'score', width: '75px' },
-        { key: 'technicalSignal', label: 'Sinyal', type: 'signal', width: '110px' },
+        { key: 'symbol', label: 'Simbol', type: 'text', width: '95px' },
+        { key: 'name', label: 'Nama', type: 'text', width: '130px' },
+        { key: 'sector', label: 'Sektor', type: 'sector', width: '105px' },
+        { key: 'price', label: 'Harga', type: 'price', width: '85px' },
+        { key: 'changePercent', label: 'Chg%', type: 'percent', width: '75px' },
+        { key: 'volume', label: 'Volume', type: 'volume', width: '85px' },
+        { key: 'marketCap', label: 'M.Cap', type: 'bignum', width: '85px' },
+        { key: 'per', label: 'PER', type: 'number', width: '65px' },
+        { key: 'pbv', label: 'PBV', type: 'number', width: '65px' },
+        { key: 'roe', label: 'ROE', type: 'percent', width: '65px' },
+        { key: 'der', label: 'DER', type: 'number', width: '65px' },
+        { key: 'dividendYield', label: 'Div%', type: 'percent', width: '65px' },
+        { key: 'fundamentalScore', label: 'F.Skor', type: 'score', width: '70px' },
+        { key: 'technicalSignal', label: 'Sinyal', type: 'signal', width: '105px' },
     ],
 
     // ─── Init ──────────────────────────────────────────────────────────
@@ -133,6 +246,7 @@ const StockScreener = {
         this._setupEventListeners();
         this._renderFilterChips();
         this._renderPresets();
+        this._renderSectorCards();
     },
 
     // ─── Get All Symbols ───────────────────────────────────────────────
@@ -241,6 +355,9 @@ const StockScreener = {
                 fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
                 fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
 
+                // Sector
+                sector: this.getSectorForSymbol(symbol),
+
                 // Fundamental
                 per: fundamental?.per ?? null,
                 pbv: fundamental?.pbv ?? null,
@@ -263,6 +380,77 @@ const StockScreener = {
         } catch (err) {
             console.warn(`[Screener] Error fetching ${symbol}:`, err.message);
             return null;
+        }
+    },
+
+    // ─── Render Sector Cards (Stockbit Category UI) ──────────────────────
+    _renderSectorCards() {
+        const container = document.getElementById('screenerSectorsGrid');
+        if (!container) return;
+
+        let html = '';
+        Object.entries(this.IDX_SECTORS).forEach(([sectorKey, sec]) => {
+            // Calculate real-time average % change for this sector from _results if available
+            let avgChange = 0;
+            let count = 0;
+            if (this._results && this._results.length > 0) {
+                const sectorStocks = this._results.filter(r => r.sector === sectorKey);
+                if (sectorStocks.length > 0) {
+                    const totalChange = sectorStocks.reduce((sum, r) => sum + (r.changePercent || 0), 0);
+                    avgChange = totalChange / sectorStocks.length;
+                    count = sectorStocks.length;
+                }
+            }
+            if (count === 0) count = sec.symbols.length;
+
+            const changeCls = avgChange > 0 ? 'positive' : avgChange < 0 ? 'negative' : 'neutral';
+            const changeSign = avgChange > 0 ? '+' : '';
+            const changeText = avgChange !== 0 ? `${changeSign}${avgChange.toFixed(2)}%` : '0.00%';
+
+            const isActive = this._activeFilters.some(f => f.key === 'sector' && f.value === sectorKey);
+
+            html += `
+                <div class="screener-sector-card ${isActive ? 'active' : ''}" data-sector="${sectorKey}">
+                    <div class="sector-card-icon-wrap">
+                        <span class="sector-card-emoji">${sec.icon}</span>
+                    </div>
+                    <div class="sector-card-info">
+                        <span class="sector-card-title">${sectorKey}</span>
+                        <span class="sector-card-pct ${changeCls}">${changeText}</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+        // Bind clicks on sector cards
+        container.querySelectorAll('.screener-sector-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const sec = card.dataset.sector;
+                const activeSecFilter = this._activeFilters.find(f => f.key === 'sector');
+                if (activeSecFilter && activeSecFilter.value === sec) {
+                    // Deselect if already active
+                    this.removeFilter('sector');
+                    document.getElementById('screenerResetSectorBtn')?.classList.add('active');
+                } else {
+                    // Filter by sector
+                    this.addFilter('sector', '==', sec);
+                    document.getElementById('screenerResetSectorBtn')?.classList.remove('active');
+                }
+                this._renderSectorCards();
+            });
+        });
+
+        // Reset Sector Button
+        const resetSecBtn = document.getElementById('screenerResetSectorBtn');
+        if (resetSecBtn) {
+            const hasSectorFilter = this._activeFilters.some(f => f.key === 'sector');
+            resetSecBtn.classList.toggle('active', !hasSectorFilter);
+            resetSecBtn.onclick = () => {
+                this.removeFilter('sector');
+                this._renderSectorCards();
+            };
         }
     },
 
@@ -747,6 +935,11 @@ const StockScreener = {
                 if (!val) return '<span class="text-muted">—</span>';
                 const sigCls = val.toLowerCase().replace(/_/g, '-');
                 return `<span class="screener-signal-badge ${sigCls}">${val.replace(/_/g, ' ')}</span>`;
+            }
+
+            case 'sector': {
+                if (!val) return '<span class="text-muted">—</span>';
+                return `<span class="screener-sector-tag sector-${val.toLowerCase()}">${val}</span>`;
             }
 
             default:
