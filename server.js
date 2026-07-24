@@ -846,59 +846,143 @@ async function analyzeStockForRecommendation(symbol) {
 
     if (ohlcv.length < 30) return null;
 
-    // Basic technical analysis (server-side simplified version)
+    // Technical Analysis with High-Precision Multi-Indicator Suite
     const closes = ohlcv.map(d => d.close);
+    const highs = ohlcv.map(d => d.high);
+    const lows = ohlcv.map(d => d.low);
     const lastPrice = closes[closes.length - 1];
     const prevPrice = closes[closes.length - 2] || lastPrice;
 
-    // SMA calculations
+    // Moving Average Helper
     const calcSMA = (arr, period) => {
       if (arr.length < period) return null;
       const slice = arr.slice(-period);
       return slice.reduce((a, b) => a + b, 0) / period;
     };
 
+    const calcEMA = (arr, period) => {
+      if (arr.length < period) return null;
+      const k = 2 / (period + 1);
+      let ema = arr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      for (let i = period; i < arr.length; i++) {
+        ema = arr[i] * k + ema * (1 - k);
+      }
+      return ema;
+    };
+
     const sma20 = calcSMA(closes, 20);
     const sma50 = calcSMA(closes, 50);
     const sma200 = calcSMA(closes, 200);
+    const ema12 = calcEMA(closes, 12);
+    const ema26 = calcEMA(closes, 26);
+    const ema50 = calcEMA(closes, 50);
 
-    // RSI calculation
-    let avgGain = 0, avgLoss = 0;
-    const period = 14;
-    for (let i = closes.length - period; i < closes.length; i++) {
-      const change = closes[i] - closes[i - 1];
-      if (change > 0) avgGain += change;
-      else avgLoss += Math.abs(change);
+    // 1. RSI Calculation (Wilder's Smoothing Method)
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= 14; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff >= 0) gains += diff;
+      else losses += Math.abs(diff);
     }
-    avgGain /= period;
-    avgLoss /= period;
+    let avgGain = gains / 14;
+    let avgLoss = losses / 14;
+
+    for (let i = 15; i < closes.length; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff >= 0) {
+        avgGain = (avgGain * 13 + diff) / 14;
+        avgLoss = (avgLoss * 13) / 14;
+      } else {
+        avgGain = (avgGain * 13) / 14;
+        avgLoss = (avgLoss * 13 + Math.abs(diff)) / 14;
+      }
+    }
     const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
     const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
 
-    // Volume analysis
-    const recentVol = ohlcv.slice(-5).map(d => d.volume);
+    // 2. MACD (12, 26, 9) Calculation
+    const macdLine = ema12 && ema26 ? ema12 - ema26 : 0;
+    // Calculate MACD history for signal line
+    const macdHistory = [];
+    let tempEma12 = closes.slice(0, 12).reduce((a, b) => a + b, 0) / 12;
+    let tempEma26 = closes.slice(0, 26).reduce((a, b) => a + b, 0) / 26;
+    for (let i = 26; i < closes.length; i++) {
+      tempEma12 = closes[i] * (2 / 13) + tempEma12 * (1 - 2 / 13);
+      tempEma26 = closes[i] * (2 / 27) + tempEma26 * (1 - 2 / 27);
+      macdHistory.push(tempEma12 - tempEma26);
+    }
+    const macdSignalLine = macdHistory.length >= 9 ? calcEMA(macdHistory, 9) : 0;
+    const macdHist = macdLine - macdSignalLine;
+
+    // 3. Stochastic Oscillator (%K 14)
+    const sliceHighs = highs.slice(-14);
+    const sliceLows = lows.slice(-14);
+    const maxHigh = Math.max(...sliceHighs);
+    const minLow = Math.min(...sliceLows);
+    const stochK = maxHigh !== minLow ? ((lastPrice - minLow) / (maxHigh - minLow)) * 100 : 50;
+
+    // 4. Volume Analysis
     const avgVol = ohlcv.slice(-20).reduce((s, d) => s + d.volume, 0) / 20;
     const lastVol = ohlcv[ohlcv.length - 1].volume;
     const volRatio = avgVol > 0 ? lastVol / avgVol : 1;
 
-    // Simple scoring
-    let score = 50;
-    if (sma20 && lastPrice > sma20) score += 8;
-    else if (sma20) score -= 8;
-    if (sma50 && lastPrice > sma50) score += 10;
-    else if (sma50) score -= 10;
-    if (sma200 && lastPrice > sma200) score += 12;
-    else if (sma200) score -= 12;
-    if (rsi < 30) score += 15;
-    else if (rsi < 40) score += 8;
-    else if (rsi > 70) score -= 15;
-    else if (rsi > 60) score -= 8;
-    if (sma50 && sma200 && sma50 > sma200) score += 10; // golden cross area
-    else if (sma50 && sma200) score -= 10;
-    if (volRatio > 1.5 && lastPrice > prevPrice) score += 5;
-    if (volRatio > 1.5 && lastPrice < prevPrice) score -= 5;
+    // 5. Pivot Point Support & Resistance
+    const lastHigh = highs[highs.length - 1];
+    const lastLow = lows[lows.length - 1];
+    const pivot = (lastHigh + lastLow + lastPrice) / 3;
+    const support1 = (2 * pivot) - lastHigh;
+    const resistance1 = (2 * pivot) - lastLow;
+    const support2 = pivot - (lastHigh - lastLow);
+    const resistance2 = pivot + (lastHigh - lastLow);
 
-    score = Math.max(0, Math.min(100, score));
+    // Dynamic Support & Resistance Range
+    const recentLows = lows.slice(-20);
+    const recentHighs = highs.slice(-20);
+    const support = Math.min(...recentLows, support1);
+    const resistance = Math.max(...recentHighs, resistance1);
+
+    // Multi-Factor Precision Scoring (0-100)
+    let score = 50;
+
+    // RSI Factor (+/- 20)
+    if (rsi <= 30) score += 20;
+    else if (rsi <= 40) score += 10;
+    else if (rsi >= 70) score -= 20;
+    else if (rsi >= 60) score -= 10;
+
+    // Moving Average Trend Factor (+/- 20)
+    if (sma20 && lastPrice > sma20) score += 6;
+    else if (sma20) score -= 6;
+    if (sma50 && lastPrice > sma50) score += 7;
+    else if (sma50) score -= 7;
+    if (sma200 && lastPrice > sma200) score += 7;
+    else if (sma200) score -= 7;
+
+    // Golden / Death Cross Factor (+/- 10)
+    if (sma50 && sma200) {
+      if (sma50 > sma200) score += 10;
+      else score -= 10;
+    }
+
+    // MACD Factor (+/- 15)
+    if (macdLine > macdSignalLine) {
+      score += 10;
+      if (macdHist > 0) score += 5;
+    } else {
+      score -= 10;
+      if (macdHist < 0) score -= 5;
+    }
+
+    // Volume Breakout Factor (+/- 15)
+    if (volRatio > 1.5 && lastPrice > prevPrice) score += 15;
+    else if (volRatio > 1.5 && lastPrice < prevPrice) score -= 15;
+    else if (volRatio > 1.2 && lastPrice > prevPrice) score += 8;
+
+    // Stochastic Factor (+/- 10)
+    if (stochK < 20) score += 10;
+    else if (stochK > 80) score -= 10;
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
 
     let signal;
     if (score >= 75) signal = 'STRONG_BUY';
@@ -906,12 +990,6 @@ async function analyzeStockForRecommendation(symbol) {
     else if (score >= 40) signal = 'NEUTRAL';
     else if (score >= 25) signal = 'SELL';
     else signal = 'STRONG_SELL';
-
-    // Support/Resistance estimates
-    const recentLows = ohlcv.slice(-20).map(d => d.low);
-    const recentHighs = ohlcv.slice(-20).map(d => d.high);
-    const support = Math.min(...recentLows);
-    const resistance = Math.max(...recentHighs);
 
     return {
       symbol,
@@ -928,12 +1006,17 @@ async function analyzeStockForRecommendation(symbol) {
       score,
       signal,
       rsi: parseFloat(rsi.toFixed(1)),
+      macdLine: parseFloat(macdLine.toFixed(2)),
+      macdSignalLine: parseFloat(macdSignalLine.toFixed(2)),
+      stochK: parseFloat(stochK.toFixed(1)),
       sma20,
       sma50,
       sma200,
       volRatio: parseFloat(volRatio.toFixed(2)),
       support: parseFloat(support.toFixed(0)),
       resistance: parseFloat(resistance.toFixed(0)),
+      support1: parseFloat(support1.toFixed(0)),
+      resistance1: parseFloat(resistance1.toFixed(0)),
     };
   } catch (err) {
     console.warn(`[Recommendation] Failed to analyze ${symbol}:`, err.message);

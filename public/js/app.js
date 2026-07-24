@@ -75,7 +75,11 @@ class ChartManager {
         this.candleSeries = null;
         this.volumeSeries = null;
         this.smaSeries = null;
+        this.sma50Series = null;
         this.container = null;
+        this.customWrap = null;
+        this.tvWrap = null;
+        this.mode = 'tv'; // 'tv' (TradingView Widget) or 'custom' (Lightweight Charts)
         this.currentSymbol = 'BBRI.JK';
         this.currentInterval = '1d';
         this._lastData = [];           // Full OHLCV array
@@ -85,22 +89,89 @@ class ChartManager {
 
     init(containerId) {
         this.container = document.getElementById(containerId);
-        if (!this.container) return;
-        this._createChart();
+        this.tvWrap = document.getElementById('tradingview_widget_wrap');
+        this.customWrap = document.getElementById('custom_chart_wrap');
+
+        this._setupModeToggle();
+        this._createCustomChart();
     }
 
-    _createChart() {
+    _setupModeToggle() {
+        const tvBtn = document.getElementById('chartModeTvBtn');
+        const customBtn = document.getElementById('chartModeCustomBtn');
+        const statusText = document.getElementById('chartStatusText');
+
+        if (tvBtn && customBtn) {
+            tvBtn.addEventListener('click', () => {
+                this.mode = 'tv';
+                tvBtn.classList.add('active');
+                customBtn.classList.remove('active');
+                if (this.tvWrap) this.tvWrap.classList.add('active');
+                if (this.customWrap) this.customWrap.classList.remove('active');
+                if (statusText) statusText.textContent = 'TradingView Widget Live';
+                this.renderTradingView(this.currentSymbol, this.currentInterval);
+            });
+
+            customBtn.addEventListener('click', () => {
+                this.mode = 'custom';
+                customBtn.classList.add('active');
+                tvBtn.classList.remove('active');
+                if (this.customWrap) this.customWrap.classList.add('active');
+                if (this.tvWrap) this.tvWrap.classList.remove('active');
+                if (statusText) statusText.textContent = 'Pro Chart + Indikator Live';
+                this.loadData(this.currentSymbol, this.currentInterval);
+            });
+        }
+    }
+
+    renderTradingView(symbol, interval) {
+        if (!this.tvWrap) return;
+        this.tvWrap.innerHTML = '';
+
+        const tvSymbol = symbol.endsWith('.JK') ? `IDX:${symbol.replace('.JK', '')}` : symbol;
+        const tvIntervalMap = {
+            '1m': '1', '5m': '5', '15m': '15', '60m': '60',
+            '1d': 'D', '1wk': 'W', '1mo': 'M'
+        };
+        const tvInt = tvIntervalMap[interval] || 'D';
+
+        if (typeof TradingView !== 'undefined') {
+            try {
+                new TradingView.widget({
+                    "autosize": true,
+                    "symbol": tvSymbol,
+                    "interval": tvInt,
+                    "timezone": "Asia/Jakarta",
+                    "theme": "light",
+                    "style": "1",
+                    "locale": "id",
+                    "toolbar_bg": "#f8fafc",
+                    "enable_publishing": false,
+                    "allow_symbol_change": false,
+                    "container_id": "tradingview_widget_wrap"
+                });
+            } catch (e) {
+                console.warn('[ChartManager] TV Widget Embed error:', e);
+            }
+        } else {
+            this.tvWrap.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b;">Memuat TradingView Widget...</div>';
+        }
+    }
+
+    _createCustomChart() {
+        if (!this.customWrap) return;
+
         // Clear previous
         if (this.chart) {
             this.chart.remove();
             this.chart = null;
         }
-        this.container.innerHTML = '';
+        this.customWrap.innerHTML = '';
 
         // Create chart
-        this.chart = LightweightCharts.createChart(this.container, {
-            width: this.container.clientWidth,
-            height: this.container.clientHeight || 450,
+        this.chart = LightweightCharts.createChart(this.customWrap, {
+            width: this.customWrap.clientWidth || 800,
+            height: this.customWrap.clientHeight || 450,
             layout: {
                 background: { type: 'solid', color: '#ffffff' },
                 textColor: '#475569',
@@ -143,7 +214,7 @@ class ChartManager {
             wickDownColor: '#ef4444',
         });
 
-        // Volume series (histogram on bottom)
+        // Volume series
         this.volumeSeries = this.chart.addHistogramSeries({
             priceFormat: { type: 'volume' },
             priceScaleId: 'volume',
@@ -156,6 +227,16 @@ class ChartManager {
         // SMA 20 overlay
         this.smaSeries = this.chart.addLineSeries({
             color: '#4f46e5',
+            lineWidth: 1.5,
+            lineStyle: 0,
+            crosshairMarkerVisible: false,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+
+        // SMA 50 overlay
+        this.sma50Series = this.chart.addLineSeries({
+            color: '#f59e0b',
             lineWidth: 1.5,
             lineStyle: 0,
             crosshairMarkerVisible: false,
@@ -178,22 +259,22 @@ class ChartManager {
                 }
             }
         });
-        this._resizeObserver.observe(this.container);
+        this._resizeObserver.observe(this.customWrap);
     }
 
     _createLegend() {
+        if (!this.customWrap) return;
         this._legendEl = document.createElement('div');
         this._legendEl.className = 'chart-legend';
         this._legendEl.innerHTML = '<span class="chart-legend-symbol"></span>';
-        this.container.style.position = 'relative';
-        this.container.appendChild(this._legendEl);
+        this.customWrap.style.position = 'relative';
+        this.customWrap.appendChild(this._legendEl);
     }
 
     _updateLegend(param) {
         if (!this._legendEl) return;
 
         if (!param || !param.time || !param.seriesData) {
-            // Show last bar info
             if (this._lastData.length > 0) {
                 const last = this._lastData[this._lastData.length - 1];
                 this._renderLegendValues(last);
@@ -247,6 +328,11 @@ class ChartManager {
         this.currentSymbol = symbol;
         this.currentInterval = interval;
 
+        // Render TradingView Widget if mode is 'tv'
+        if (this.mode === 'tv') {
+            this.renderTradingView(symbol, interval);
+        }
+
         try {
             const chartData = await DataService.getChart(symbol, interval);
             const ohlcv = this._normalizeData(chartData);
@@ -258,32 +344,37 @@ class ChartManager {
 
             this._lastData = ohlcv;
 
-            // Set candlestick data
-            this.candleSeries.setData(ohlcv.map(d => ({
-                time: d.time,
-                open: d.open,
-                high: d.high,
-                low: d.low,
-                close: d.close,
-            })));
+            if (this.candleSeries && this.volumeSeries) {
+                // Set candlestick data
+                this.candleSeries.setData(ohlcv.map(d => ({
+                    time: d.time,
+                    open: d.open,
+                    high: d.high,
+                    low: d.low,
+                    close: d.close,
+                })));
 
-            // Set volume data with colors
-            this.volumeSeries.setData(ohlcv.map(d => ({
-                time: d.time,
-                value: d.volume,
-                color: d.close >= d.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-            })));
+                // Set volume data with colors
+                this.volumeSeries.setData(ohlcv.map(d => ({
+                    time: d.time,
+                    value: d.volume,
+                    color: d.close >= d.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+                })));
 
-            // Compute and set SMA 20
-            const smaData = this._computeSMA(ohlcv, 20);
-            this.smaSeries.setData(smaData);
+                // Compute and set SMA 20 & SMA 50
+                const smaData = this._computeSMA(ohlcv, 20);
+                if (this.smaSeries) this.smaSeries.setData(smaData);
 
-            // Fit content
-            this.chart.timeScale().fitContent();
+                const sma50Data = this._computeSMA(ohlcv, 50);
+                if (this.sma50Series) this.sma50Series.setData(sma50Data);
 
-            // Update legend with last bar
-            if (ohlcv.length > 0) {
-                this._renderLegendValues(ohlcv[ohlcv.length - 1]);
+                // Fit content
+                if (this.chart) this.chart.timeScale().fitContent();
+
+                // Update legend with last bar
+                if (ohlcv.length > 0) {
+                    this._renderLegendValues(ohlcv[ohlcv.length - 1]);
+                }
             }
         } catch (err) {
             console.error('[Chart] loadData error:', err);
