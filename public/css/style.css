@@ -1125,7 +1125,37 @@ body {
 }
 
 .chart-viewport.active {
-  display: block;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+#tradingview_widget_wrap {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 500px !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+}
+
+#tradingview_widget_wrap iframe {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 500px !important;
+  flex: 1 !important;
+  border: none !important;
+}
+
+#custom_chart_wrap {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 500px !important;
+  flex: 1 !important;
+  position: relative !important;
 }
 
 .main-chart {
@@ -5080,15 +5110,18 @@ body {
     justify-content: center;
   }
 
-  /* Chart Container */
+  /* Chart Container on Mobile (< 768px) */
   .chart-container {
-    min-height: 380px !important;
-    height: 380px !important;
+    min-height: 480px !important;
+    height: 480px !important;
   }
 
-  .chart-viewport {
-    min-height: 380px !important;
-    height: 380px !important;
+  .chart-viewport,
+  #tradingview_widget_wrap,
+  #tradingview_widget_wrap iframe,
+  #custom_chart_wrap {
+    min-height: 480px !important;
+    height: 480px !important;
   }
 
   /* Sector Cards Grid on Mobile (3 Columns) */
@@ -5178,13 +5211,16 @@ body {
   }
 
   .chart-container {
-    min-height: 340px !important;
-    height: 340px !important;
+    min-height: 450px !important;
+    height: 450px !important;
   }
 
-  .chart-viewport {
-    min-height: 340px !important;
-    height: 340px !important;
+  .chart-viewport,
+  #tradingview_widget_wrap,
+  #tradingview_widget_wrap iframe,
+  #custom_chart_wrap {
+    min-height: 450px !important;
+    height: 450px !important;
   }
 
   /* Sector Cards Grid on Small Phones (2 Columns) */
