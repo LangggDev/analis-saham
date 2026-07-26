@@ -941,6 +941,45 @@ async function analyzeStockForRecommendation(symbol) {
     const support = Math.min(...recentLows, support1);
     const resistance = Math.max(...recentHighs, resistance1);
 
+    // 6. ATR (Average True Range) Calculation for Dynamic Volatility Risk / Reward (Min 1:2 RRR)
+    let atr = 0;
+    const trs = [];
+    for (let i = 1; i < ohlcv.length; i++) {
+      const d = ohlcv[i];
+      const prev = ohlcv[i - 1];
+      const tr = Math.max(d.high - d.low, Math.abs(d.high - prev.close), Math.abs(d.low - prev.close));
+      trs.push(tr);
+    }
+    if (trs.length >= 14) {
+      atr = trs.slice(-14).reduce((a, b) => a + b, 0) / 14;
+    } else if (trs.length > 0) {
+      atr = trs.reduce((a, b) => a + b, 0) / trs.length;
+    }
+    const atrStopLoss = Math.max(1, Math.round(lastPrice - Math.max(1.5 * atr, lastPrice - support)));
+    const riskAmount = Math.max(lastPrice - atrStopLoss, lastPrice * 0.02);
+    const atrTakeProfit = Math.round(lastPrice + Math.max(riskAmount * 2, resistance - lastPrice, 3 * atr));
+
+    // 7. Bull Trap & Bearish / Bullish Divergence Detection Engine (Last 20 bars)
+    let divergence = 'NONE';
+    if (ohlcv.length >= 20) {
+      const pastSlice = ohlcv.slice(-20, -3);
+      const maxPastClose = Math.max(...pastSlice.map(d => d.close));
+      const minPastClose = Math.min(...pastSlice.map(d => d.close));
+      
+      // Bearish Divergence (Bull Trap): New price high without momentum support (< 58)
+      if (lastPrice >= maxPastClose * 0.995 && rsi < 58) {
+        divergence = 'BEARISH_BULL_TRAP';
+      }
+      // Bullish Divergence (Accumulation Reversal): New price low while RSI forms higher ground (> 35)
+      else if (lastPrice <= minPastClose * 1.005 && rsi > 35) {
+        divergence = 'BULLISH_ACCUMULATION';
+      }
+    }
+
+    // 8. Liquidity & Anti-Penny Stock Trap Protection
+    const dailyTurnover = avgVol * lastPrice;
+    const isIlliquidTrap = symbol.endsWith('.JK') && (lastPrice <= 60 || (dailyTurnover < 250000000 && lastPrice < 5000) || avgVol < 15000);
+
     // Multi-Factor Precision Scoring (0-100)
     let score = 50;
 
@@ -973,14 +1012,25 @@ async function analyzeStockForRecommendation(symbol) {
       if (macdHist < 0) score -= 5;
     }
 
-    // Volume Breakout Factor (+/- 15)
-    if (volRatio > 1.5 && lastPrice > prevPrice) score += 15;
-    else if (volRatio > 1.5 && lastPrice < prevPrice) score -= 15;
-    else if (volRatio > 1.2 && lastPrice > prevPrice) score += 8;
+    // Volume Breakout Factor (+/- 15, nullified if illiquid/penny trap)
+    if (!isIlliquidTrap) {
+      if (volRatio > 1.5 && lastPrice > prevPrice) score += 15;
+      else if (volRatio > 1.5 && lastPrice < prevPrice) score -= 15;
+      else if (volRatio > 1.2 && lastPrice > prevPrice) score += 8;
+    }
 
     // Stochastic Factor (+/- 10)
     if (stochK < 20) score += 10;
     else if (stochK > 80) score -= 10;
+
+    // Divergence Synergy (+/- 15)
+    if (divergence === 'BULLISH_ACCUMULATION') score += 15;
+    else if (divergence === 'BEARISH_BULL_TRAP') score -= 15;
+
+    // Liquidity Trap Safety Override (Cap score at 45 to protect retail from penny pump traps)
+    if (isIlliquidTrap) {
+      score = Math.min(score - 20, 45);
+    }
 
     score = Math.max(0, Math.min(100, Math.round(score)));
 
@@ -1017,6 +1067,12 @@ async function analyzeStockForRecommendation(symbol) {
       resistance: parseFloat(resistance.toFixed(0)),
       support1: parseFloat(support1.toFixed(0)),
       resistance1: parseFloat(resistance1.toFixed(0)),
+      atr: parseFloat(atr.toFixed(2)),
+      atrStopLoss,
+      atrTakeProfit,
+      divergence,
+      isIlliquidTrap,
+      dailyTurnover: Math.round(dailyTurnover),
     };
   } catch (err) {
     console.warn(`[Recommendation] Failed to analyze ${symbol}:`, err.message);
@@ -1125,8 +1181,8 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
           ...pick,
           entryLow: ai.entry_low || pick.support,
           entryHigh: ai.entry_high || pick.price,
-          stopLoss: ai.stop_loss || Math.round(pick.support * 0.97),
-          takeProfit: ai.take_profit || Math.round(pick.resistance * 1.02),
+          stopLoss: ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97),
+          takeProfit: ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02),
           reasoning: ai.reasoning || generateFallbackReasoning(pick),
         };
       };
@@ -1230,8 +1286,8 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
           ...pick,
           entryLow: ai.entry_low || pick.support,
           entryHigh: ai.entry_high || pick.price,
-          stopLoss: ai.stop_loss || Math.round(pick.support * 0.97),
-          takeProfit: ai.take_profit || Math.round(pick.resistance * 1.02),
+          stopLoss: ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97),
+          takeProfit: ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02),
           reasoning: ai.reasoning || generateFallbackReasoning(pick),
           priority: ai.priority || 3,
         };
@@ -1257,25 +1313,41 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
   }
 });
 
-// Fallback reasoning generator
+// Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, and Liquidity alerts)
 function generateFallbackReasoning(stock) {
   const parts = [];
-  if (stock.rsi < 30) parts.push('RSI sangat oversold — potensi rebound kuat');
-  else if (stock.rsi < 40) parts.push('RSI mendekati oversold');
-  else if (stock.rsi > 70) parts.push('RSI overbought — waspada koreksi');
-  else if (stock.rsi > 60) parts.push('RSI condong overbought');
-  else parts.push(`RSI netral (${stock.rsi})`);
 
-  if (stock.sma50 && stock.sma200) {
-    if (stock.sma50 > stock.sma200) parts.push('trend jangka panjang bullish (golden cross area)');
-    else parts.push('trend jangka panjang bearish');
+  // 1. Critical Liquidity & Penny Stock Warning
+  if (stock.isIlliquidTrap) {
+    parts.push('⚠️ PROTEKSI LIKUIDITAS: Turn-over / volume rendah (rawan jebakan volatilitas saham gila/penny stock)');
   }
 
-  if (stock.volRatio > 1.5) parts.push(`volume ${stock.volRatio}x di atas rata-rata`);
-  else if (stock.volRatio < 0.5) parts.push('volume sangat rendah');
+  // 2. Divergence / Bull Trap Alerts
+  if (stock.divergence === 'BEARISH_BULL_TRAP') {
+    parts.push('🚨 Waspada Bull Trap (Bearish Divergence): Harga melaju tinggi tanpa dukung momentum RSI');
+  } else if (stock.divergence === 'BULLISH_ACCUMULATION') {
+    parts.push('🟢 Bullish Divergence terdeteksi: Akumulasi di area bottom, potensi reversal kuat');
+  }
 
-  if (stock.price > stock.sma20 && stock.sma20) parts.push('harga di atas SMA20');
-  else if (stock.sma20) parts.push('harga di bawah SMA20');
+  // 3. RSI & Trend Momentum
+  if (stock.rsi < 30) parts.push('RSI sangat oversold — peluang technical rebound');
+  else if (stock.rsi < 40) parts.push('RSI di zona akumulasi (mendekati oversold)');
+  else if (stock.rsi > 70) parts.push('RSI overbought — rawan aksi take profit');
+  else if (stock.rsi > 60) parts.push('RSI menguji area overbought');
+
+  if (stock.sma50 && stock.sma200) {
+    if (stock.sma50 > stock.sma200) parts.push('trend major bullish (Golden Cross zone)');
+    else parts.push('trend major bearish (Death Cross zone)');
+  }
+
+  if (!stock.isIlliquidTrap && stock.volRatio > 1.5) {
+    parts.push(`lonjakan volume ${stock.volRatio}x mengonfirmasi momentum`);
+  }
+
+  // 4. Risk/Reward (ATR) parameter display
+  if (stock.atrStopLoss && stock.atrTakeProfit) {
+    parts.push(`RRR optimal (SL ATR: ${stock.atrStopLoss}, Target: ${stock.atrTakeProfit})`);
+  }
 
   return parts.join('. ') + '.';
 }

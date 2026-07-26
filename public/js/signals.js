@@ -134,6 +134,56 @@ const SignalEngine = {
             totalWeight += 5;
         }
 
+        // --- ATR (Average True Range) & Volatility Risk/Reward ---
+        const atrValues = Indicators.ATR(data, 14);
+        const lastATR = atrValues.length > 0 ? atrValues[atrValues.length - 1].value : lastPrice * 0.02;
+        const atrStopLoss = Math.max(1, Math.round(lastPrice - 1.5 * lastATR));
+        const riskDistance = Math.max(lastPrice - atrStopLoss, lastPrice * 0.015);
+        const atrTakeProfit = Math.round(lastPrice + Math.max(riskDistance * 2, 3 * lastATR));
+
+        // --- Bull Trap & Divergence Scanner (Last 20 bars) ---
+        let divergence = 'NONE';
+        const rsiValLast = rsiValues && rsiValues.length > 0 ? rsiValues[rsiValues.length - 1].value : 50;
+        if (data.length >= 20) {
+            const pastSlice = data.slice(-20, -3);
+            const maxPastClose = Math.max(...pastSlice.map(d => d.close));
+            const minPastClose = Math.min(...pastSlice.map(d => d.close));
+            
+            if (lastPrice >= maxPastClose * 0.995 && rsiValLast < 58) {
+                divergence = 'BEARISH_BULL_TRAP';
+                signals.push({
+                    name: 'Divergence Scanner',
+                    signal: 'SELL',
+                    value: `RSI ${rsiValLast.toFixed(1)}`,
+                    desc: '🚨 Waspada Bull Trap (Bearish Divergence): Harga melaju tinggi tanpa didukung momentum RSI',
+                    _score: -0.8
+                });
+            } else if (lastPrice <= minPastClose * 1.005 && rsiValLast > 35) {
+                divergence = 'BULLISH_ACCUMULATION';
+                signals.push({
+                    name: 'Divergence Scanner',
+                    signal: 'BUY',
+                    value: `RSI ${rsiValLast.toFixed(1)}`,
+                    desc: '🟢 Bullish Divergence terdeteksi: Akumulasi di area bottom, potensi reversal tajam',
+                    _score: 0.8
+                });
+            }
+        }
+
+        // --- Liquidity & Anti-Penny Stock Trap Protection ---
+        const avgVolVal = volMA && volMA.length > 0 ? volMA[volMA.length - 1].value : lastVolume;
+        const dailyTurnover = avgVolVal * lastPrice;
+        const isIlliquidTrap = lastPrice <= 60 || (dailyTurnover < 250000000 && lastPrice < 5000) || avgVolVal < 15000;
+        if (isIlliquidTrap) {
+            signals.push({
+                name: 'Liquidity Filter',
+                signal: 'NEUTRAL',
+                value: `Turnover ${Math.round(dailyTurnover / 1000000)}M`,
+                desc: '⚠️ Proteksi Likuiditas: Volume/transaksi rendah (rawan jebakan volatilitas saham gila/penny stock)',
+                _score: -0.5
+            });
+        }
+
         // Multi-Factor Precision Technical & Momentum Scoring (0-100 Scale, unified with Recommendation Engine)
         let precisionScore = 50;
 
@@ -179,8 +229,8 @@ const SignalEngine = {
             }
         }
 
-        // 5. Volume Breakout Factor (+/- 15)
-        if (volMA && volMA.length > 0) {
+        // 5. Volume Breakout Factor (+/- 15, nullified if illiquid trap)
+        if (!isIlliquidTrap && volMA && volMA.length > 0) {
             const avgVol = volMA[volMA.length - 1].value;
             const volRatio = avgVol > 0 ? lastVolume / avgVol : 1;
             const prevPrice = data.length >= 2 ? data[data.length - 2].close : lastPrice;
@@ -196,6 +246,15 @@ const SignalEngine = {
             else if (stochK > 80) precisionScore -= 10;
         }
 
+        // 7. Divergence Synergy (+/- 15)
+        if (divergence === 'BULLISH_ACCUMULATION') precisionScore += 15;
+        else if (divergence === 'BEARISH_BULL_TRAP') precisionScore -= 15;
+
+        // 8. Liquidity Trap Safety Override (Cap score at 45)
+        if (isIlliquidTrap) {
+            precisionScore = Math.min(precisionScore - 20, 45);
+        }
+
         // Clamp final normalized technical score to 0-100 scale
         const score = Math.max(0, Math.min(100, Math.round(precisionScore)));
 
@@ -207,6 +266,12 @@ const SignalEngine = {
             score,
             signals: cleanSignals,
             trendStrength,
+            atr: parseFloat(lastATR.toFixed(2)),
+            atrStopLoss,
+            atrTakeProfit,
+            divergence,
+            isIlliquidTrap,
+            dailyTurnover: Math.round(dailyTurnover)
         };
     },
 
