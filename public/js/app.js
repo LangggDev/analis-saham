@@ -142,10 +142,10 @@ class ChartManager {
                     "symbol": tvSymbol,
                     "interval": tvInt,
                     "timezone": "Asia/Jakarta",
-                    "theme": "light",
+                    "theme": "dark",
                     "style": "1",
                     "locale": "id",
-                    "toolbar_bg": "#f8fafc",
+                    "toolbar_bg": "#0d121c",
                     "enable_publishing": false,
                     "allow_symbol_change": false,
                     "container_id": "tradingview_widget_wrap"
@@ -173,26 +173,26 @@ class ChartManager {
             width: this.customWrap.clientWidth || 800,
             height: this.customWrap.clientHeight || 450,
             layout: {
-                background: { type: 'solid', color: '#ffffff' },
-                textColor: '#475569',
-                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+                background: { type: 'solid', color: '#0d121c' },
+                textColor: '#cbd5e1',
+                fontFamily: "'Plus Jakarta Sans', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif",
                 fontSize: 12,
             },
             grid: {
-                vertLines: { color: '#f1f5f9' },
-                horzLines: { color: '#f1f5f9' },
+                vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+                horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
             },
             crosshair: {
                 mode: LightweightCharts.CrosshairMode.Normal,
-                vertLine: { color: '#94a3b8', width: 1, style: 2, labelBackgroundColor: '#4f46e5' },
-                horzLine: { color: '#94a3b8', width: 1, style: 2, labelBackgroundColor: '#4f46e5' },
+                vertLine: { color: '#64748b', width: 1, style: 2, labelBackgroundColor: '#4f46e5' },
+                horzLine: { color: '#64748b', width: 1, style: 2, labelBackgroundColor: '#4f46e5' },
             },
             rightPriceScale: {
-                borderColor: '#e2e8f0',
+                borderColor: 'rgba(255, 255, 255, 0.12)',
                 scaleMargins: { top: 0.1, bottom: 0.25 },
             },
             timeScale: {
-                borderColor: '#e2e8f0',
+                borderColor: 'rgba(255, 255, 255, 0.12)',
                 timeVisible: true,
                 secondsVisible: false,
                 rightOffset: 5,
@@ -206,12 +206,12 @@ class ChartManager {
 
         // Candlestick series
         this.candleSeries = this.chart.addCandlestickSeries({
-            upColor: '#10b981',
-            downColor: '#ef4444',
-            borderUpColor: '#10b981',
-            borderDownColor: '#ef4444',
-            wickUpColor: '#10b981',
-            wickDownColor: '#ef4444',
+            upColor: '#00e676',
+            downColor: '#ff5252',
+            borderUpColor: '#00e676',
+            borderDownColor: '#ff5252',
+            wickUpColor: '#00e676',
+            wickDownColor: '#ff5252',
         });
 
         // Volume series
@@ -226,8 +226,8 @@ class ChartManager {
 
         // SMA 20 overlay
         this.smaSeries = this.chart.addLineSeries({
-            color: '#4f46e5',
-            lineWidth: 1.5,
+            color: '#38bdf8',
+            lineWidth: 2,
             lineStyle: 0,
             crosshairMarkerVisible: false,
             priceLineVisible: false,
@@ -236,8 +236,8 @@ class ChartManager {
 
         // SMA 50 overlay
         this.sma50Series = this.chart.addLineSeries({
-            color: '#f59e0b',
-            lineWidth: 1.5,
+            color: '#ffab00',
+            lineWidth: 2,
             lineStyle: 0,
             crosshairMarkerVisible: false,
             priceLineVisible: false,
