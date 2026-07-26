@@ -92,6 +92,21 @@ class ChartManager {
         this.tvWrap = document.getElementById('tradingview_widget_wrap');
         this.customWrap = document.getElementById('custom_chart_wrap');
 
+        // Explicitly enforce visibility of initial mode to prevent stacking
+        if (this.tvWrap && this.customWrap) {
+            if (this.mode === 'tv') {
+                this.tvWrap.style.display = 'flex';
+                this.tvWrap.classList.add('active');
+                this.customWrap.style.display = 'none';
+                this.customWrap.classList.remove('active');
+            } else {
+                this.customWrap.style.display = 'flex';
+                this.customWrap.classList.add('active');
+                this.tvWrap.style.display = 'none';
+                this.tvWrap.classList.remove('active');
+            }
+        }
+
         this._setupModeToggle();
         this._createCustomChart();
     }
@@ -106,8 +121,14 @@ class ChartManager {
                 this.mode = 'tv';
                 tvBtn.classList.add('active');
                 customBtn.classList.remove('active');
-                if (this.tvWrap) this.tvWrap.classList.add('active');
-                if (this.customWrap) this.customWrap.classList.remove('active');
+                if (this.tvWrap) {
+                    this.tvWrap.style.display = 'flex';
+                    this.tvWrap.classList.add('active');
+                }
+                if (this.customWrap) {
+                    this.customWrap.style.display = 'none';
+                    this.customWrap.classList.remove('active');
+                }
                 if (statusText) statusText.textContent = 'TradingView Widget Live';
                 this.renderTradingView(this.currentSymbol, this.currentInterval);
             });
@@ -116,9 +137,23 @@ class ChartManager {
                 this.mode = 'custom';
                 customBtn.classList.add('active');
                 tvBtn.classList.remove('active');
-                if (this.customWrap) this.customWrap.classList.add('active');
-                if (this.tvWrap) this.tvWrap.classList.remove('active');
+                if (this.customWrap) {
+                    this.customWrap.style.display = 'flex';
+                    this.customWrap.classList.add('active');
+                }
+                if (this.tvWrap) {
+                    this.tvWrap.style.display = 'none';
+                    this.tvWrap.classList.remove('active');
+                    this.tvWrap.innerHTML = ''; // Clean up TV widget iframe to free resources & prevent stacking
+                }
                 if (statusText) statusText.textContent = 'Pro Chart + Indikator Live';
+                if (this.chart && this.customWrap) {
+                    setTimeout(() => {
+                        const width = this.customWrap.clientWidth || this.container?.clientWidth || 800;
+                        const height = this.customWrap.clientHeight || 520;
+                        this.chart.applyOptions({ width, height });
+                    }, 50);
+                }
                 this.loadData(this.currentSymbol, this.currentInterval);
             });
         }

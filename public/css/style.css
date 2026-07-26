@@ -1176,10 +1176,10 @@ body {
 }
 
 .chart-viewport {
-  display: none;
+  display: none !important;
   width: 100%;
   height: 100%;
-  min-height: 500px;
+  min-height: 520px;
   flex: 1;
 }
 
@@ -1188,33 +1188,34 @@ body {
   flex-direction: column !important;
   width: 100% !important;
   height: 100% !important;
+  min-height: 520px !important;
   flex: 1 !important;
+  position: relative !important;
 }
 
 #tradingview_widget_wrap {
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 500px !important;
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  position: relative !important;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  flex: 1;
+  flex-direction: column;
+  position: relative;
 }
 
 #tradingview_widget_wrap iframe {
   width: 100% !important;
   height: 100% !important;
-  min-height: 500px !important;
+  min-height: 520px !important;
   flex: 1 !important;
   border: none !important;
 }
 
 #custom_chart_wrap {
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 500px !important;
-  flex: 1 !important;
-  position: relative !important;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  flex: 1;
+  position: relative;
 }
 
 .main-chart {
