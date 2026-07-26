@@ -1369,17 +1369,21 @@ class App {
     updateSignalPanel(symbol, data, price) {
         if (!data || data.length < 30) return;
         const result = SignalEngine.analyze(data);
-        this._lastTechnicalScore = result.score;
+        
+        // Sync with official recommendation pick score if symbol is currently recommended
+        const recPick = typeof StockRecommendation !== 'undefined' ? StockRecommendation.getRecommendationForSymbol(symbol) : null;
+        this._lastTechnicalScore = recPick && typeof recPick.score === 'number' ? recPick.score : result.score;
+        const displaySignal = recPick && recPick.signal ? recPick.signal : result.overall;
 
         const badgeEl = document.getElementById('signalBadge');
         if (badgeEl) {
-            badgeEl.textContent = result.overall.replace(/_/g, ' ');
-            badgeEl.className = `signal-badge signal-${result.overall.toLowerCase()}`;
+            badgeEl.textContent = displaySignal.replace(/_/g, ' ');
+            badgeEl.className = `signal-badge signal-${displaySignal.toLowerCase()}`;
         }
 
         const needleEl = document.getElementById('signalGaugeNeedle');
         if (needleEl) {
-            const pct = ((result.score + 100) / 200) * 100;
+            const pct = Math.max(0, Math.min(100, this._lastTechnicalScore));
             needleEl.style.left = `${pct}%`;
         }
 

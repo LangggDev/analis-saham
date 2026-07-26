@@ -391,7 +391,30 @@ const StockRecommendation = {
     },
 
     // ─── Helpers ───────────────────────────────────────────────────────
+    getRecommendationForSymbol(symbol) {
+        if (!symbol) return null;
+        if (this._todayData) {
+            const all = [
+                ...(this._todayData.buyPicks || []),
+                ...(this._todayData.holdPicks || []),
+                ...(this._todayData.sellPicks || [])
+            ];
+            const found = all.find(p => p.symbol === symbol);
+            if (found) return found;
+        }
+        if (this._tomorrowData && !this._tomorrowData.locked) {
+            const all = [
+                ...(this._tomorrowData.morningPicks || []),
+                ...(this._tomorrowData.avoidPicks || [])
+            ];
+            const found = all.find(p => p.symbol === symbol);
+            if (found) return found;
+        }
+        return null;
+    },
+
     _getStockCount() {
-        return '60+'; // Number of liquid IDX stocks analyzed
+        return '300+'; // Number of liquid IDX stocks analyzed
     },
 };
+

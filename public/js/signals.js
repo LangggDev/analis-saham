@@ -134,10 +134,70 @@ const SignalEngine = {
             totalWeight += 5;
         }
 
-        // Normalise score to -100 … +100
-        const score = totalWeight > 0
-            ? Math.round((totalScore / totalWeight) * 100)
-            : 0;
+        // Multi-Factor Precision Technical & Momentum Scoring (0-100 Scale, unified with Recommendation Engine)
+        let precisionScore = 50;
+
+        // 1. RSI Factor (+/- 20)
+        if (rsiValues && rsiValues.length > 0) {
+            const rsiVal = rsiValues[rsiValues.length - 1].value;
+            if (rsiVal <= 30) precisionScore += 20;
+            else if (rsiVal <= 40) precisionScore += 10;
+            else if (rsiVal >= 70) precisionScore -= 20;
+            else if (rsiVal >= 60) precisionScore -= 10;
+        }
+
+        // 2. Moving Average Trend Factor (+/- 20)
+        const getVal = (arr) => arr && arr.length > 0 ? arr[arr.length - 1].value : null;
+        const s20 = getVal(sma20);
+        const s50 = getVal(sma50);
+        const s200 = getVal(sma200);
+
+        if (s20 && lastPrice > s20) precisionScore += 6;
+        else if (s20) precisionScore -= 6;
+        if (s50 && lastPrice > s50) precisionScore += 7;
+        else if (s50) precisionScore -= 7;
+        if (s200 && lastPrice > s200) precisionScore += 7;
+        else if (s200) precisionScore -= 7;
+
+        // 3. Golden / Death Cross Factor (+/- 10)
+        if (s50 && s200) {
+            if (s50 > s200) precisionScore += 10;
+            else precisionScore -= 10;
+        }
+
+        // 4. MACD Momentum (+/- 15)
+        if (macdData && macdData.macdLine.length > 0 && macdData.signalLine.length > 0) {
+            const mLine = macdData.macdLine[macdData.macdLine.length - 1].value;
+            const sigLine = macdData.signalLine[macdData.signalLine.length - 1].value;
+            const mHist = macdData.histogram && macdData.histogram.length > 0 ? macdData.histogram[macdData.histogram.length - 1].value : 0;
+            if (mLine > sigLine) {
+                precisionScore += 10;
+                if (mHist > 0) precisionScore += 5;
+            } else {
+                precisionScore -= 10;
+                if (mHist < 0) precisionScore -= 5;
+            }
+        }
+
+        // 5. Volume Breakout Factor (+/- 15)
+        if (volMA && volMA.length > 0) {
+            const avgVol = volMA[volMA.length - 1].value;
+            const volRatio = avgVol > 0 ? lastVolume / avgVol : 1;
+            const prevPrice = data.length >= 2 ? data[data.length - 2].close : lastPrice;
+            if (volRatio > 1.5 && lastPrice > prevPrice) precisionScore += 15;
+            else if (volRatio > 1.5 && lastPrice < prevPrice) precisionScore -= 15;
+            else if (volRatio > 1.2 && lastPrice > prevPrice) precisionScore += 8;
+        }
+
+        // 6. Stochastic Factor (+/- 10)
+        if (stochData && stochData.k.length > 0) {
+            const stochK = stochData.k[stochData.k.length - 1].value;
+            if (stochK < 20) precisionScore += 10;
+            else if (stochK > 80) precisionScore -= 10;
+        }
+
+        // Clamp final normalized technical score to 0-100 scale
+        const score = Math.max(0, Math.min(100, Math.round(precisionScore)));
 
         // Strip internal fields from public output
         const cleanSignals = signals.map(({ _score, _trendStrength, ...rest }) => rest);
@@ -718,14 +778,14 @@ const SignalEngine = {
     /* ------------------------------------------------------------------ */
 
     /**
-     * Map aggregate score (–100 … +100) to an overall signal label.
-     * Tighter thresholds for more accurate signals.
+     * Map aggregate score (0 … 100) to an overall signal label.
+     * Unified scale matching recommendation engine and combined scoring.
      */
     _scoreToSignal(score) {
-        if (score >= 50) return 'STRONG_BUY';
-        if (score >= 20) return 'BUY';
-        if (score > -20) return 'NEUTRAL';
-        if (score > -50) return 'SELL';
+        if (score >= 75) return 'STRONG_BUY';
+        if (score >= 60) return 'BUY';
+        if (score >= 40) return 'NEUTRAL';
+        if (score >= 25) return 'SELL';
         return 'STRONG_SELL';
     },
 };

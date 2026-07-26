@@ -117,17 +117,16 @@ const FundamentalAnalysis = {
 
     /**
      * Get combined score from technical, fundamental, and sentiment analysis
-     * @param {number} technicalScore - Technical analysis score (-100 to +100)
+     * @param {number} technicalScore - Technical analysis score (0 to 100)
      * @param {number} fundamentalScore - Fundamental analysis score (0 to 100)
      * @param {number} sentimentScore - Sentiment analysis score (0 to 100), can be null
-     * @param {number} techWeight - Technical weight (default 0.5)
-     * @param {number} fundWeight - Fundamental weight (default 0.3)
-     * @param {number} sentWeight - Sentiment weight (default 0.2)
      * @returns {{combinedScore: number, signal: string, label: string}}
      */
     getCombinedScore(technicalScore, fundamentalScore, sentimentScore = null) {
-        // Normalize technical score from -100..+100 to 0..100
-        const normalizedTech = (technicalScore + 100) / 2;
+        // Handle both standardized 0-100 scale and legacy negative scale gracefully
+        const normalizedTech = typeof technicalScore === 'number' && technicalScore < 0 
+            ? Math.round((technicalScore + 100) / 2) 
+            : Math.max(0, Math.min(100, typeof technicalScore === 'number' ? technicalScore : 50));
 
         const hasFund = fundamentalScore !== null && fundamentalScore !== undefined;
         const hasSent = sentimentScore !== null && sentimentScore !== undefined;
@@ -136,33 +135,63 @@ const FundamentalAnalysis = {
         const dataSources = ['technical'];
 
         if (hasFund && hasSent) {
-            // All 3 sources available: 50% tech, 30% fund, 20% sent
-            combined = Math.round(normalizedTech * 0.5 + fundamentalScore * 0.3 + sentimentScore * 0.2);
+            // Adaptive Momentum & Quality Integration
             dataSources.push('fundamental', 'sentiment');
+            if (normalizedTech >= 70) {
+                // Breakout Momentum Regime: Technicals lead, decent fundamentals preserve strong signal
+                if (fundamentalScore >= 40) {
+                    combined = Math.max(normalizedTech, Math.round(normalizedTech * 0.65 + fundamentalScore * 0.2 + sentimentScore * 0.15));
+                } else {
+                    combined = Math.round(normalizedTech * 0.7 + fundamentalScore * 0.15 + sentimentScore * 0.15);
+                }
+            } else if (normalizedTech >= 40) {
+                // Accumulation & Neutral Regime: Balanced multi-factor weighting
+                combined = Math.round(normalizedTech * 0.5 + fundamentalScore * 0.3 + sentimentScore * 0.2);
+            } else {
+                // Defensive Regime: Cautious capping in downtrend
+                combined = Math.min(59, Math.round(normalizedTech * 0.6 + fundamentalScore * 0.25 + sentimentScore * 0.15));
+            }
         } else if (hasFund) {
-            // Tech + Fund only: 60% tech, 40% fund
-            combined = Math.round(normalizedTech * 0.6 + fundamentalScore * 0.4);
+            // Tech + Fund Adaptive Regime
             dataSources.push('fundamental');
+            if (normalizedTech >= 70) {
+                // Breakout Regime: If fundamentals are acceptable (>=40), momentum breakout is preserved
+                if (fundamentalScore >= 40) {
+                    combined = Math.max(normalizedTech, Math.round(normalizedTech * 0.7 + fundamentalScore * 0.3));
+                } else {
+                    combined = Math.round(normalizedTech * 0.75 + fundamentalScore * 0.25);
+                }
+            } else if (normalizedTech >= 40) {
+                combined = Math.round(normalizedTech * 0.6 + fundamentalScore * 0.4);
+            } else {
+                combined = Math.min(59, Math.round(normalizedTech * 0.65 + fundamentalScore * 0.35));
+            }
         } else if (hasSent) {
-            // Tech + Sent only: 70% tech, 30% sent
-            combined = Math.round(normalizedTech * 0.7 + sentimentScore * 0.3);
+            // Tech + Sentiment
             dataSources.push('sentiment');
+            if (normalizedTech >= 70) {
+                combined = Math.max(normalizedTech, Math.round(normalizedTech * 0.8 + sentimentScore * 0.2));
+            } else {
+                combined = Math.round(normalizedTech * 0.7 + sentimentScore * 0.3);
+            }
         } else {
-            // Only technical — just normalize, don't mix with anything
+            // Only technical
             combined = Math.round(normalizedTech);
         }
 
+        combined = Math.max(0, Math.min(100, combined));
+
         let signal, label;
-        if (combined >= 80) {
+        if (combined >= 75) {
             signal = 'STRONG_BUY';
             label = 'Sangat Layak Beli';
-        } else if (combined >= 65) {
+        } else if (combined >= 60) {
             signal = 'BUY';
             label = 'Layak Beli';
-        } else if (combined >= 45) {
+        } else if (combined >= 40) {
             signal = 'NEUTRAL';
             label = 'Netral / Hold';
-        } else if (combined >= 30) {
+        } else if (combined >= 25) {
             signal = 'SELL';
             label = 'Pertimbangkan Jual';
         } else {
