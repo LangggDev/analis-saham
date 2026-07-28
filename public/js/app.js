@@ -1473,6 +1473,69 @@ class App {
             trendEl.textContent = trendLabels[result.trendStrength] || result.trendStrength;
         }
 
+        // ── Update Profit Estimation Panel ──
+        const pe = result.profitEstimation;
+        if (pe) {
+            const isIDR = symbol.endsWith('.JK');
+            const fmtP = (v) => {
+                if (v == null || isNaN(v)) return '—';
+                if (isIDR) return new Intl.NumberFormat('id-ID').format(Math.round(v));
+                return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+            };
+
+            this._setText('peTimeEstimate', pe.timeEstimateLabel || '—');
+            this._setText('peProfitPercent', `+${pe.profitPercent || 0}%`);
+            this._setText('peLossPercent', `-${pe.lossPercent || 0}%`);
+            this._setText('peRRR', `1:${pe.riskRewardRatio || 0}`);
+            this._setText('peWinProb', `${pe.winProbability || 0}%`);
+            this._setText('peProfitPerDay', `+${pe.profitPerDay || 0}%`);
+            this._setText('peATRPercent', `${pe.atrPercent || 0}%`);
+            this._setText('peStopLoss', fmtP(result.atrStopLoss));
+            this._setText('peTakeProfit', fmtP(result.atrTakeProfit));
+
+            // Win prob bar fill
+            const wpFill = document.getElementById('peWinProbFill');
+            if (wpFill) {
+                wpFill.style.width = `${Math.min(100, pe.winProbability || 0)}%`;
+                if (pe.winProbability >= 65) wpFill.className = 'pe-bar-fill wp-high';
+                else if (pe.winProbability >= 50) wpFill.className = 'pe-bar-fill wp-medium';
+                else wpFill.className = 'pe-bar-fill wp-low';
+            }
+
+            // Confidence badge
+            const confEl = document.getElementById('peConfidence');
+            if (confEl) {
+                confEl.textContent = pe.confidenceLevel || 'N/A';
+                confEl.className = `pe-confidence-badge ${pe.confidenceLevel === 'HIGH' ? 'conf-high' : pe.confidenceLevel === 'MEDIUM' ? 'conf-medium' : 'conf-low'}`;
+            }
+
+            // Show the panel
+            const pePanel = document.getElementById('profitEstimationPanel');
+            if (pePanel) pePanel.style.display = 'block';
+        }
+
+        // ── Update Fibonacci Levels ──
+        const fib = result.fibonacci;
+        if (fib) {
+            this._setText('fibLevel0', fmtP(fib.level0));
+            this._setText('fibLevel236', fmtP(fib.level236));
+            this._setText('fibLevel382', fmtP(fib.level382));
+            this._setText('fibLevel500', fmtP(fib.level500));
+            this._setText('fibLevel618', fmtP(fib.level618));
+            this._setText('fibLevel786', fmtP(fib.level786));
+            this._setText('fibLevel1', fmtP(fib.level1));
+
+            const fibPanel = document.getElementById('fibonacciPanel');
+            if (fibPanel) fibPanel.style.display = 'block';
+        }
+
+        // Formatter for Fibonacci
+        function fmtP(v) {
+            if (v == null || isNaN(v)) return '—';
+            if (symbol.endsWith('.JK')) return new Intl.NumberFormat('id-ID').format(Math.round(v));
+            return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+        }
+
         // Update combined score
         this._updateCombinedScore();
 

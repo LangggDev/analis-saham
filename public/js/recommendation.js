@@ -327,8 +327,16 @@ const StockRecommendation = {
         const isBuyType = type === 'buy' || type === 'morning';
         const cardClass = type === 'sell' || type === 'avoid' ? 'rec-card-sell' : type === 'hold' ? 'rec-card-hold' : 'rec-card-buy';
 
+        // Profit Estimation Data
+        const pe = pick.profitEstimation || {};
+        const hasEstimation = pe.profitPercent != null && pe.winProbability != null;
+
         let detailsHTML = '';
         if (isBuyType) {
+            // Confidence badge color
+            const confClass = pe.confidenceLevel === 'HIGH' ? 'conf-high' : pe.confidenceLevel === 'MEDIUM' ? 'conf-medium' : 'conf-low';
+            const winProbClass = (pe.winProbability || 0) >= 65 ? 'wp-high' : (pe.winProbability || 0) >= 50 ? 'wp-medium' : 'wp-low';
+
             detailsHTML = `
                 <div class="rec-card-levels">
                     <div class="rec-level rec-level-entry">
@@ -337,13 +345,52 @@ const StockRecommendation = {
                     </div>
                     <div class="rec-level rec-level-sl">
                         <span class="rec-level-label">🛑 Stop Loss</span>
-                        <span class="rec-level-value">${fmtPrice(pick.stopLoss)}</span>
+                        <span class="rec-level-value">${fmtPrice(pick.stopLoss)}${pe.lossPercent ? ` <small class="rec-loss-pct">(-${pe.lossPercent}%)</small>` : ''}</span>
                     </div>
                     <div class="rec-level rec-level-tp">
                         <span class="rec-level-label">🎯 Take Profit</span>
-                        <span class="rec-level-value">${fmtPrice(pick.takeProfit)}</span>
+                        <span class="rec-level-value">${fmtPrice(pick.takeProfit)}${pe.profitPercent ? ` <small class="rec-profit-pct">(+${pe.profitPercent}%)</small>` : ''}</span>
                     </div>
                 </div>
+                ${hasEstimation ? `
+                <div class="rec-card-estimation">
+                    <div class="rec-est-header">
+                        <span class="rec-est-title">📊 Estimasi Profit</span>
+                        <span class="rec-est-confidence ${confClass}">${pe.confidenceLevel || 'N/A'}</span>
+                    </div>
+                    <div class="rec-est-grid">
+                        <div class="rec-est-item">
+                            <span class="rec-est-icon">⏱️</span>
+                            <span class="rec-est-label">Waktu</span>
+                            <span class="rec-est-value">${pe.timeEstimateLabel || '—'}</span>
+                        </div>
+                        <div class="rec-est-item">
+                            <span class="rec-est-icon">💰</span>
+                            <span class="rec-est-label">Profit</span>
+                            <span class="rec-est-value rec-profit-pct">+${pe.profitPercent || 0}%</span>
+                        </div>
+                        <div class="rec-est-item">
+                            <span class="rec-est-icon">📊</span>
+                            <span class="rec-est-label">RRR</span>
+                            <span class="rec-est-value">1:${pe.riskRewardRatio || 0}</span>
+                        </div>
+                        <div class="rec-est-item">
+                            <span class="rec-est-icon">🎯</span>
+                            <span class="rec-est-label">Win Prob</span>
+                            <span class="rec-est-value ${winProbClass}">${pe.winProbability || 0}%</span>
+                        </div>
+                    </div>
+                    <div class="rec-est-progress">
+                        <div class="rec-est-progress-label">
+                            <span>Profit/Hari: <strong>+${pe.profitPerDay || 0}%</strong></span>
+                            <span>ATR: ${pe.atrPercent || 0}%</span>
+                        </div>
+                        <div class="rec-est-bar">
+                            <div class="rec-est-bar-fill" style="width: ${Math.min(100, (pe.winProbability || 0))}%"></div>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
             `;
         }
 

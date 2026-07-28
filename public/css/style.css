@@ -5337,3 +5337,367 @@ body {
     align-self: flex-start;
   }
 }
+
+/* ============================================
+   Profit Estimation Panel — Signal Tab
+   ============================================ */
+
+.pe-panel {
+  margin-top: 16px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(124, 58, 237, 0.06));
+  border: 1px solid rgba(79, 70, 229, 0.25);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  animation: fadeSlideUp 0.4s ease-out;
+}
+
+.pe-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.pe-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+}
+
+.pe-confidence-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.conf-high {
+  background: rgba(0, 230, 118, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.conf-medium {
+  background: rgba(255, 171, 0, 0.15);
+  color: var(--yellow);
+  border: 1px solid rgba(255, 171, 0, 0.3);
+}
+
+.conf-low {
+  background: rgba(255, 82, 82, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+.pe-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pe-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s ease;
+}
+
+.pe-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(79, 70, 229, 0.3);
+  transform: translateY(-1px);
+}
+
+.pe-icon {
+  font-size: 1.2rem;
+}
+
+.pe-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.pe-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.pe-bar-section {
+  margin-top: 4px;
+}
+
+.pe-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.pe-bar-labels strong {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.pe-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.pe-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.pe-bar-fill.wp-high {
+  background: linear-gradient(90deg, #00c853, #00e676);
+  box-shadow: 0 0 8px rgba(0, 230, 118, 0.4);
+}
+
+.pe-bar-fill.wp-medium {
+  background: linear-gradient(90deg, #f59e0b, #ffab00);
+  box-shadow: 0 0 8px rgba(255, 171, 0, 0.4);
+}
+
+.pe-bar-fill.wp-low {
+  background: linear-gradient(90deg, #dc2626, #ff5252);
+  box-shadow: 0 0 8px rgba(255, 82, 82, 0.4);
+}
+
+/* ============================================
+   Fibonacci Retracement Panel
+   ============================================ */
+
+.fib-panel {
+  margin-top: 14px;
+  background: rgba(56, 189, 248, 0.05);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  animation: fadeSlideUp 0.5s ease-out;
+}
+
+.fib-title {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+}
+
+.fib-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.fib-level {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.fib-level:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fib-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.fib-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+/* Fibonacci level color accents */
+.fib-0 { border-left: 3px solid var(--green); }
+.fib-236 { border-left: 3px solid #66bb6a; }
+.fib-382 { border-left: 3px solid var(--blue); }
+.fib-500 { border-left: 3px solid var(--yellow); }
+.fib-618 { border-left: 3px solid var(--orange); }
+.fib-786 { border-left: 3px solid #ef5350; }
+.fib-1 { border-left: 3px solid var(--red); }
+
+/* ============================================
+   Recommendation Card — Profit Estimation
+   ============================================ */
+
+.rec-card-estimation {
+  margin-top: 10px;
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.06), rgba(124, 58, 237, 0.04));
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: var(--radius-sm);
+  animation: fadeSlideUp 0.3s ease-out;
+}
+
+.rec-est-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.rec-est-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rec-est-confidence {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rec-est-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.rec-est-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.rec-est-icon {
+  font-size: 1rem;
+}
+
+.rec-est-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 600;
+}
+
+.rec-est-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.rec-profit-pct {
+  color: var(--green) !important;
+}
+
+.rec-loss-pct {
+  color: var(--red) !important;
+  font-size: 0.72rem;
+}
+
+.wp-high {
+  color: var(--green) !important;
+}
+
+.wp-medium {
+  color: var(--yellow) !important;
+}
+
+.wp-low {
+  color: var(--red) !important;
+}
+
+.rec-est-progress {
+  margin-top: 4px;
+}
+
+.rec-est-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.rec-est-progress-label strong {
+  color: var(--green);
+}
+
+.rec-est-bar {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.rec-est-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--green));
+  transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.3);
+}
+
+/* Animation keyframes */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .pe-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .rec-est-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .fib-level {
+    padding: 5px 8px;
+  }
+  
+  .fib-value {
+    font-size: 0.78rem;
+  }
+}

@@ -261,6 +261,29 @@ const SignalEngine = {
         // Strip internal fields from public output
         const cleanSignals = signals.map(({ _score, _trendStrength, ...rest }) => rest);
 
+        // ── Fibonacci Retracement Levels ──
+        const fibLookback = Math.min(60, data.length);
+        const fibSlice = data.slice(-fibLookback);
+        const fibHigh = Math.max(...fibSlice.map(d => d.high));
+        const fibLow = Math.min(...fibSlice.map(d => d.low));
+        const fibRange = fibHigh - fibLow;
+        const fibonacci = {
+            level0: parseFloat(fibHigh.toFixed(0)),
+            level236: parseFloat((fibHigh - fibRange * 0.236).toFixed(0)),
+            level382: parseFloat((fibHigh - fibRange * 0.382).toFixed(0)),
+            level500: parseFloat((fibHigh - fibRange * 0.5).toFixed(0)),
+            level618: parseFloat((fibHigh - fibRange * 0.618).toFixed(0)),
+            level786: parseFloat((fibHigh - fibRange * 0.786).toFixed(0)),
+            level1: parseFloat(fibLow.toFixed(0)),
+        };
+
+        // ── Profit Estimation Engine ──
+        const profitEstimation = this._calculateProfitEstimation(
+            data, lastPrice, lastATR, atrStopLoss, atrTakeProfit,
+            score, rsiValLast, divergence, isIlliquidTrap,
+            volMA, lastVolume
+        );
+
         return {
             overall: this._scoreToSignal(score),
             score,
@@ -269,6 +292,8 @@ const SignalEngine = {
             atr: parseFloat(lastATR.toFixed(2)),
             atrStopLoss,
             atrTakeProfit,
+            fibonacci,
+            profitEstimation,
             divergence,
             isIlliquidTrap,
             dailyTurnover: Math.round(dailyTurnover)
@@ -835,6 +860,115 @@ const SignalEngine = {
             signal,
             description,
             _score: score,
+        };
+    },
+
+    /* ------------------------------------------------------------------ */
+    /*  Profit Estimation Engine                                            */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Calculate time-based profit estimation with win probability
+     */
+    _calculateProfitEstimation(data, lastPrice, atr, stopLoss, takeProfit, score, rsi, divergence, isIlliquidTrap, volMA, lastVolume) {
+        const atrPercent = lastPrice > 0 ? (atr / lastPrice) * 100 : 1;
+
+        // MACD direction from data
+        const prevPrice = data.length >= 2 ? data[data.length - 2].close : lastPrice;
+        const priceUp = lastPrice > prevPrice;
+
+        // Volume ratio
+        const avgVol = volMA && volMA.length > 0 ? volMA[volMA.length - 1].value : lastVolume;
+        const volRatio = avgVol > 0 ? lastVolume / avgVol : 1;
+
+        // Trend direction multiplier
+        let trendMult = 1.0;
+        if (score >= 65 && rsi < 70) {
+            trendMult = 1.3;
+        } else if (score >= 55 && rsi < 65) {
+            trendMult = 1.1;
+        } else if (score <= 35) {
+            trendMult = 0.5;
+        } else if (rsi >= 70) {
+            trendMult = 0.3;
+        }
+
+        // Volume confirmation
+        const volConf = volRatio >= 1.5 ? 1.3 : volRatio >= 1.0 ? 1.0 : 0.7;
+
+        // Daily movement estimate
+        const dailyMovement = atr * trendMult * volConf;
+
+        // Distances
+        const distTP = Math.abs(takeProfit - lastPrice);
+        const distSL = Math.abs(lastPrice - stopLoss);
+
+        // Risk:Reward
+        const rrr = distSL > 0 ? parseFloat((distTP / distSL).toFixed(2)) : 0;
+
+        // Time estimates
+        const rawDays = dailyMovement > 0 ? distTP / dailyMovement : 999;
+        const confMult = Math.max(0.3, Math.min(2.0, score / 60));
+        const estDays = Math.max(1, Math.round(rawDays / confMult));
+        const estHours = Math.round(estDays * 6.5);
+        const estWeeks = parseFloat((estDays / 5).toFixed(1));
+
+        // Profit/Loss percentages
+        const profitPct = lastPrice > 0 ? parseFloat(((distTP / lastPrice) * 100).toFixed(2)) : 0;
+        const lossPct = lastPrice > 0 ? parseFloat(((distSL / lastPrice) * 100).toFixed(2)) : 0;
+        const profitPerDay = estDays > 0 ? parseFloat((profitPct / estDays).toFixed(2)) : 0;
+
+        // Win probability
+        let winProb = 50;
+        if (rsi <= 30) winProb += 12;
+        else if (rsi <= 40) winProb += 6;
+        else if (rsi >= 70) winProb -= 12;
+        else if (rsi >= 60) winProb -= 6;
+
+        if (score >= 70) winProb += 10;
+        else if (score >= 60) winProb += 5;
+        else if (score <= 30) winProb -= 10;
+        else if (score <= 40) winProb -= 5;
+
+        if (volRatio > 1.5 && priceUp) winProb += 7;
+        else if (volRatio > 1.5 && !priceUp) winProb -= 7;
+
+        if (divergence === 'BULLISH_ACCUMULATION') winProb += 8;
+        else if (divergence === 'BEARISH_BULL_TRAP') winProb -= 8;
+
+        if (rrr >= 3) winProb += 5;
+        else if (rrr >= 2) winProb += 3;
+        else if (rrr < 1) winProb -= 5;
+
+        if (isIlliquidTrap) winProb -= 10;
+
+        winProb = Math.max(5, Math.min(95, winProb));
+
+        // Human readable label
+        let timeLabel;
+        if (estDays <= 1) {
+            timeLabel = `~${estHours} jam`;
+        } else if (estDays <= 5) {
+            timeLabel = `~${estDays} hari`;
+        } else if (estWeeks <= 4) {
+            timeLabel = `~${estWeeks} minggu`;
+        } else {
+            timeLabel = `~${Math.round(estWeeks)} minggu`;
+        }
+
+        return {
+            estimatedHours: estHours,
+            estimatedDays: estDays,
+            estimatedWeeks: estWeeks,
+            timeEstimateLabel: timeLabel,
+            profitPercent: profitPct,
+            profitPerDay,
+            lossPercent: lossPct,
+            riskRewardRatio: rrr,
+            winProbability: winProb,
+            dailyMovement: parseFloat(dailyMovement.toFixed(2)),
+            atrPercent: parseFloat(atrPercent.toFixed(2)),
+            confidenceLevel: confMult >= 1.2 ? 'HIGH' : confMult >= 0.8 ? 'MEDIUM' : 'LOW',
         };
     },
 

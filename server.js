@@ -959,6 +959,126 @@ async function analyzeStockForRecommendation(symbol) {
     const riskAmount = Math.max(lastPrice - atrStopLoss, lastPrice * 0.02);
     const atrTakeProfit = Math.round(lastPrice + Math.max(riskAmount * 2, resistance - lastPrice, 3 * atr));
 
+    // 6b. Fibonacci Retracement Levels (last 60 bars swing)
+    const fibLookback = Math.min(60, ohlcv.length);
+    const fibSlice = ohlcv.slice(-fibLookback);
+    const fibHigh = Math.max(...fibSlice.map(d => d.high));
+    const fibLow = Math.min(...fibSlice.map(d => d.low));
+    const fibRange = fibHigh - fibLow;
+    const fibonacci = {
+      level0: parseFloat(fibHigh.toFixed(0)),
+      level236: parseFloat((fibHigh - fibRange * 0.236).toFixed(0)),
+      level382: parseFloat((fibHigh - fibRange * 0.382).toFixed(0)),
+      level500: parseFloat((fibHigh - fibRange * 0.5).toFixed(0)),
+      level618: parseFloat((fibHigh - fibRange * 0.618).toFixed(0)),
+      level786: parseFloat((fibHigh - fibRange * 0.786).toFixed(0)),
+      level1: parseFloat(fibLow.toFixed(0)),
+    };
+
+    // 6c. Profit Estimation Engine (Time-Based)
+    const atrPercent = lastPrice > 0 ? (atr / lastPrice) * 100 : 1;
+
+    // Trend direction multiplier from MACD & RSI
+    let trendDirectionMult = 1.0;
+    if (macdLine > macdSignalLine && rsi < 70) {
+      trendDirectionMult = 1.0 + Math.min((macdLine - macdSignalLine) / (Math.abs(macdLine) + 1), 0.5);
+    } else if (macdLine < macdSignalLine && rsi > 30) {
+      trendDirectionMult = 0.5; // bearish trend slows bullish target
+    } else if (rsi >= 70) {
+      trendDirectionMult = 0.3; // overbought reduces upside speed
+    }
+
+    // Volume confirmation factor
+    const volConfirmation = volRatio >= 1.5 ? 1.3 : volRatio >= 1.0 ? 1.0 : 0.7;
+
+    // Daily expected movement toward target (based on ATR, adjusted by trend & volume)
+    const dailyMovementEstimate = atr * trendDirectionMult * volConfirmation;
+
+    // Calculate distances
+    const distanceToTP = Math.abs(atrTakeProfit - lastPrice);
+    const distanceToSL = Math.abs(lastPrice - atrStopLoss);
+
+    // Risk:Reward Ratio
+    const riskRewardRatio = distanceToSL > 0 ? parseFloat((distanceToTP / distanceToSL).toFixed(2)) : 0;
+
+    // Time estimates (in trading days)
+    const rawDaysToTarget = dailyMovementEstimate > 0 ? distanceToTP / dailyMovementEstimate : 999;
+
+    // Confidence adjustment based on score & trend alignment
+    const confidenceMultiplier = Math.max(0.3, Math.min(2.0, (score > 0 ? score : 50) / 60));
+    const adjustedDaysToTarget = Math.max(1, Math.round(rawDaysToTarget / confidenceMultiplier));
+
+    // Convert to different time units
+    const IDX_TRADING_HOURS_PER_DAY = 6.5; // 09:00-15:30 WIB
+    const TRADING_DAYS_PER_WEEK = 5;
+
+    const estimatedHours = Math.round(adjustedDaysToTarget * IDX_TRADING_HOURS_PER_DAY);
+    const estimatedDays = adjustedDaysToTarget;
+    const estimatedWeeks = parseFloat((adjustedDaysToTarget / TRADING_DAYS_PER_WEEK).toFixed(1));
+
+    // Profit percentage
+    const profitPercent = lastPrice > 0 ? parseFloat(((distanceToTP / lastPrice) * 100).toFixed(2)) : 0;
+    const profitPerDay = estimatedDays > 0 ? parseFloat((profitPercent / estimatedDays).toFixed(2)) : 0;
+    const lossPercent = lastPrice > 0 ? parseFloat(((distanceToSL / lastPrice) * 100).toFixed(2)) : 0;
+
+    // Win Probability Calculation (based on multi-factor alignment)
+    let winProb = 50; // base
+    // RSI alignment
+    if (rsi <= 30) winProb += 12;
+    else if (rsi <= 40) winProb += 6;
+    else if (rsi >= 70) winProb -= 12;
+    else if (rsi >= 60) winProb -= 6;
+    // MACD alignment
+    if (macdLine > macdSignalLine && macdHist > 0) winProb += 10;
+    else if (macdLine > macdSignalLine) winProb += 5;
+    else if (macdLine < macdSignalLine && macdHist < 0) winProb -= 10;
+    else if (macdLine < macdSignalLine) winProb -= 5;
+    // Moving average trend
+    if (sma20 && sma50 && lastPrice > sma20 && lastPrice > sma50) winProb += 8;
+    else if (sma20 && sma50 && lastPrice < sma20 && lastPrice < sma50) winProb -= 8;
+    // Golden/Death Cross
+    if (sma50 && sma200 && sma50 > sma200) winProb += 5;
+    else if (sma50 && sma200 && sma50 < sma200) winProb -= 5;
+    // Volume confirmation
+    if (volRatio > 1.5 && lastPrice > prevPrice) winProb += 7;
+    else if (volRatio > 1.5 && lastPrice < prevPrice) winProb -= 7;
+    // Stochastic
+    if (stochK < 20) winProb += 5;
+    else if (stochK > 80) winProb -= 5;
+    // RRR bonus (good risk:reward boosts confidence)
+    if (riskRewardRatio >= 3) winProb += 5;
+    else if (riskRewardRatio >= 2) winProb += 3;
+    else if (riskRewardRatio < 1) winProb -= 5;
+
+    winProb = Math.max(5, Math.min(95, winProb));
+
+    // Format time estimate as human readable
+    let timeEstimateLabel;
+    if (estimatedDays <= 1) {
+      timeEstimateLabel = `~${estimatedHours} jam`;
+    } else if (estimatedDays <= 5) {
+      timeEstimateLabel = `~${estimatedDays} hari`;
+    } else if (estimatedWeeks <= 4) {
+      timeEstimateLabel = `~${estimatedWeeks} minggu`;
+    } else {
+      timeEstimateLabel = `~${Math.round(estimatedWeeks)} minggu`;
+    }
+
+    const profitEstimation = {
+      estimatedHours,
+      estimatedDays,
+      estimatedWeeks,
+      timeEstimateLabel,
+      profitPercent,
+      profitPerDay,
+      lossPercent,
+      riskRewardRatio,
+      winProbability: winProb,
+      dailyMovement: parseFloat(dailyMovementEstimate.toFixed(2)),
+      atrPercent: parseFloat(atrPercent.toFixed(2)),
+      confidenceLevel: confidenceMultiplier >= 1.2 ? 'HIGH' : confidenceMultiplier >= 0.8 ? 'MEDIUM' : 'LOW',
+    };
+
     // 7. Bull Trap & Bearish / Bullish Divergence Detection Engine (Last 20 bars)
     let divergence = 'NONE';
     if (ohlcv.length >= 20) {
@@ -1058,6 +1178,7 @@ async function analyzeStockForRecommendation(symbol) {
       rsi: parseFloat(rsi.toFixed(1)),
       macdLine: parseFloat(macdLine.toFixed(2)),
       macdSignalLine: parseFloat(macdSignalLine.toFixed(2)),
+      macdHist: parseFloat(macdHist.toFixed(2)),
       stochK: parseFloat(stochK.toFixed(1)),
       sma20,
       sma50,
@@ -1070,6 +1191,8 @@ async function analyzeStockForRecommendation(symbol) {
       atr: parseFloat(atr.toFixed(2)),
       atrStopLoss,
       atrTakeProfit,
+      fibonacci,
+      profitEstimation,
       divergence,
       isIlliquidTrap,
       dailyTurnover: Math.round(dailyTurnover),
@@ -1147,22 +1270,24 @@ app.get('/api/recommendations/today', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = buyPicks.slice(0, 5).map(s =>
-            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, Support ${s.support}, Resistance ${s.resistance}, Skor ${s.score}`
+            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, Support ${s.support}, Resistance ${s.resistance}, Fibonacci 38.2% ${s.fibonacci?.level382}, Fibonacci 61.8% ${s.fibonacci?.level618}, Skor ${s.score}, Win Prob ${s.profitEstimation?.winProbability}%, Est Days ${s.profitEstimation?.estimatedDays}`
           ).join('\n');
 
-          const prompt = `Kamu adalah analis saham profesional Indonesia. Berdasarkan data teknikal berikut, berikan rekomendasi singkat untuk HARI INI dalam Bahasa Indonesia.
+          const prompt = `Kamu adalah analis saham profesional Indonesia berpengalaman 20+ tahun. Berdasarkan data teknikal berikut, berikan rekomendasi PRESISI TINGGI untuk HARI INI dalam Bahasa Indonesia.
 
 Data saham:
 ${stockSummaries}
 
 Untuk setiap saham, berikan:
-1. entry_low dan entry_high (range harga beli)
-2. stop_loss (harga cut loss)
-3. take_profit (target profit)
-4. reasoning (alasan singkat 1-2 kalimat, dalam Bahasa Indonesia)
+1. entry_low dan entry_high (range harga beli yang REALISTIS berdasarkan support dan fibonacci)
+2. stop_loss (harga cut loss KETAT, max 3-5% dari entry, berdasarkan ATR)
+3. take_profit (target profit REALISTIS berdasarkan resistance dan fibonacci)
+4. reasoning (alasan detail 2-3 kalimat, sebutkan indikator yang mendukung, dalam Bahasa Indonesia)
+
+PENTING: Entry, SL, dan TP harus REALISTIS dan berdasarkan data teknikal. Jangan asal tebak.
 
 Format response sebagai JSON array (tanpa markdown wrapper), contoh:
-[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4250,"take_profit":4800,"reasoning":"RSI oversold dengan golden cross, potensi rebound kuat."}]`;
+[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4250,"take_profit":4800,"reasoning":"RSI 28.5 oversold dengan MACD bullish crossover dan golden cross SMA50/200. Volume 1.8x mengonfirmasi akumulasi institusi."}]`;
 
           const result = await model.generateContent(prompt);
           let text = result.response.text();
@@ -1177,12 +1302,36 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
       // Merge AI analysis into picks
       const enrichPick = (pick) => {
         const ai = aiAnalysis[pick.symbol] || {};
+        const entryLow = ai.entry_low || pick.support;
+        const entryHigh = ai.entry_high || pick.price;
+        const stopLoss = ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97);
+        const takeProfit = ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02);
+
+        // Recalculate profit estimation with final entry/TP/SL values
+        const entryMid = (entryLow + entryHigh) / 2;
+        const finalDistTP = Math.abs(takeProfit - entryMid);
+        const finalDistSL = Math.abs(entryMid - stopLoss);
+        const finalRRR = finalDistSL > 0 ? parseFloat((finalDistTP / finalDistSL).toFixed(2)) : 0;
+        const finalProfitPct = entryMid > 0 ? parseFloat(((finalDistTP / entryMid) * 100).toFixed(2)) : 0;
+        const finalLossPct = entryMid > 0 ? parseFloat(((finalDistSL / entryMid) * 100).toFixed(2)) : 0;
+
+        // Use the pick's profitEstimation but override with final values
+        const pe = pick.profitEstimation || {};
+        const updatedPE = {
+          ...pe,
+          profitPercent: finalProfitPct,
+          lossPercent: finalLossPct,
+          riskRewardRatio: finalRRR,
+          profitPerDay: pe.estimatedDays > 0 ? parseFloat((finalProfitPct / pe.estimatedDays).toFixed(2)) : 0,
+        };
+
         return {
           ...pick,
-          entryLow: ai.entry_low || pick.support,
-          entryHigh: ai.entry_high || pick.price,
-          stopLoss: ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97),
-          takeProfit: ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02),
+          entryLow,
+          entryHigh,
+          stopLoss,
+          takeProfit,
+          profitEstimation: updatedPE,
           reasoning: ai.reasoning || generateFallbackReasoning(pick),
         };
       };
@@ -1282,12 +1431,35 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
 
       const enrichPick = (pick) => {
         const ai = aiAnalysis[pick.symbol] || {};
+        const entryLow = ai.entry_low || pick.support;
+        const entryHigh = ai.entry_high || pick.price;
+        const stopLoss = ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97);
+        const takeProfit = ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02);
+
+        // Recalculate profit estimation with final values
+        const entryMid = (entryLow + entryHigh) / 2;
+        const finalDistTP = Math.abs(takeProfit - entryMid);
+        const finalDistSL = Math.abs(entryMid - stopLoss);
+        const finalRRR = finalDistSL > 0 ? parseFloat((finalDistTP / finalDistSL).toFixed(2)) : 0;
+        const finalProfitPct = entryMid > 0 ? parseFloat(((finalDistTP / entryMid) * 100).toFixed(2)) : 0;
+        const finalLossPct = entryMid > 0 ? parseFloat(((finalDistSL / entryMid) * 100).toFixed(2)) : 0;
+
+        const pe = pick.profitEstimation || {};
+        const updatedPE = {
+          ...pe,
+          profitPercent: finalProfitPct,
+          lossPercent: finalLossPct,
+          riskRewardRatio: finalRRR,
+          profitPerDay: pe.estimatedDays > 0 ? parseFloat((finalProfitPct / pe.estimatedDays).toFixed(2)) : 0,
+        };
+
         return {
           ...pick,
-          entryLow: ai.entry_low || pick.support,
-          entryHigh: ai.entry_high || pick.price,
-          stopLoss: ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97),
-          takeProfit: ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02),
+          entryLow,
+          entryHigh,
+          stopLoss,
+          takeProfit,
+          profitEstimation: updatedPE,
           reasoning: ai.reasoning || generateFallbackReasoning(pick),
           priority: ai.priority || 3,
         };
@@ -1313,7 +1485,7 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
   }
 });
 
-// Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, and Liquidity alerts)
+// Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, Liquidity, and Profit Estimation)
 function generateFallbackReasoning(stock) {
   const parts = [];
 
@@ -1344,8 +1516,13 @@ function generateFallbackReasoning(stock) {
     parts.push(`lonjakan volume ${stock.volRatio}x mengonfirmasi momentum`);
   }
 
-  // 4. Risk/Reward (ATR) parameter display
-  if (stock.atrStopLoss && stock.atrTakeProfit) {
+  // 4. Risk/Reward & Profit Estimation
+  const pe = stock.profitEstimation;
+  if (pe) {
+    parts.push(`RRR ${pe.riskRewardRatio}:1 (SL ${stock.atrStopLoss}, TP ${stock.atrTakeProfit})`);
+    parts.push(`Estimasi profit +${pe.profitPercent}% dalam ${pe.timeEstimateLabel}`);
+    parts.push(`Win probability: ${pe.winProbability}%`);
+  } else if (stock.atrStopLoss && stock.atrTakeProfit) {
     parts.push(`RRR optimal (SL ATR: ${stock.atrStopLoss}, Target: ${stock.atrTakeProfit})`);
   }
 

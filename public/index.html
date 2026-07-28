@@ -428,6 +428,73 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Profit Estimation Panel -->
+                        <div class="pe-panel" id="profitEstimationPanel" style="display:none;">
+                            <div class="pe-header">
+                                <h4 class="pe-title">📊 Estimasi Profit & Risiko</h4>
+                                <span class="pe-confidence-badge conf-medium" id="peConfidence">MEDIUM</span>
+                            </div>
+                            <div class="pe-grid">
+                                <div class="pe-item pe-item-time">
+                                    <span class="pe-icon">⏱️</span>
+                                    <span class="pe-label">Est. Waktu</span>
+                                    <span class="pe-value" id="peTimeEstimate">—</span>
+                                </div>
+                                <div class="pe-item pe-item-profit">
+                                    <span class="pe-icon">💰</span>
+                                    <span class="pe-label">Profit Target</span>
+                                    <span class="pe-value rec-profit-pct" id="peProfitPercent">—</span>
+                                </div>
+                                <div class="pe-item pe-item-loss">
+                                    <span class="pe-icon">🛑</span>
+                                    <span class="pe-label">Max Loss</span>
+                                    <span class="pe-value rec-loss-pct" id="peLossPercent">—</span>
+                                </div>
+                                <div class="pe-item pe-item-rrr">
+                                    <span class="pe-icon">⚖️</span>
+                                    <span class="pe-label">Risk:Reward</span>
+                                    <span class="pe-value" id="peRRR">—</span>
+                                </div>
+                                <div class="pe-item pe-item-wp">
+                                    <span class="pe-icon">🎯</span>
+                                    <span class="pe-label">Win Prob</span>
+                                    <span class="pe-value" id="peWinProb">—</span>
+                                </div>
+                                <div class="pe-item pe-item-ppd">
+                                    <span class="pe-icon">📈</span>
+                                    <span class="pe-label">Profit/Hari</span>
+                                    <span class="pe-value" id="peProfitPerDay">—</span>
+                                </div>
+                            </div>
+                            <div class="pe-bar-section">
+                                <div class="pe-bar-labels">
+                                    <span>SL: <strong id="peStopLoss">—</strong></span>
+                                    <span>Win Probability</span>
+                                    <span>TP: <strong id="peTakeProfit">—</strong></span>
+                                </div>
+                                <div class="pe-bar">
+                                    <div class="pe-bar-fill wp-medium" id="peWinProbFill" style="width: 50%"></div>
+                                </div>
+                                <div class="pe-bar-labels">
+                                    <span>ATR: <span id="peATRPercent">—</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fibonacci Levels Panel -->
+                        <div class="fib-panel" id="fibonacciPanel" style="display:none;">
+                            <h4 class="fib-title">📐 Fibonacci Retracement</h4>
+                            <div class="fib-levels">
+                                <div class="fib-level fib-0"><span class="fib-label">0% (High)</span><span class="fib-value" id="fibLevel0">—</span></div>
+                                <div class="fib-level fib-236"><span class="fib-label">23.6%</span><span class="fib-value" id="fibLevel236">—</span></div>
+                                <div class="fib-level fib-382"><span class="fib-label">38.2%</span><span class="fib-value" id="fibLevel382">—</span></div>
+                                <div class="fib-level fib-500"><span class="fib-label">50.0%</span><span class="fib-value" id="fibLevel500">—</span></div>
+                                <div class="fib-level fib-618"><span class="fib-label">61.8%</span><span class="fib-value" id="fibLevel618">—</span></div>
+                                <div class="fib-level fib-786"><span class="fib-label">78.6%</span><span class="fib-value" id="fibLevel786">—</span></div>
+                                <div class="fib-level fib-1"><span class="fib-label">100% (Low)</span><span class="fib-value" id="fibLevel1">—</span></div>
+                            </div>
+                        </div>
                     </section>
 
                     <!-- News Panel -->
