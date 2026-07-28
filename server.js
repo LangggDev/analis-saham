@@ -975,110 +975,6 @@ async function analyzeStockForRecommendation(symbol) {
       level1: parseFloat(fibLow.toFixed(0)),
     };
 
-    // 6c. Profit Estimation Engine (Time-Based)
-    const atrPercent = lastPrice > 0 ? (atr / lastPrice) * 100 : 1;
-
-    // Trend direction multiplier from MACD & RSI
-    let trendDirectionMult = 1.0;
-    if (macdLine > macdSignalLine && rsi < 70) {
-      trendDirectionMult = 1.0 + Math.min((macdLine - macdSignalLine) / (Math.abs(macdLine) + 1), 0.5);
-    } else if (macdLine < macdSignalLine && rsi > 30) {
-      trendDirectionMult = 0.5; // bearish trend slows bullish target
-    } else if (rsi >= 70) {
-      trendDirectionMult = 0.3; // overbought reduces upside speed
-    }
-
-    // Volume confirmation factor
-    const volConfirmation = volRatio >= 1.5 ? 1.3 : volRatio >= 1.0 ? 1.0 : 0.7;
-
-    // Daily expected movement toward target (based on ATR, adjusted by trend & volume)
-    const dailyMovementEstimate = atr * trendDirectionMult * volConfirmation;
-
-    // Calculate distances
-    const distanceToTP = Math.abs(atrTakeProfit - lastPrice);
-    const distanceToSL = Math.abs(lastPrice - atrStopLoss);
-
-    // Risk:Reward Ratio
-    const riskRewardRatio = distanceToSL > 0 ? parseFloat((distanceToTP / distanceToSL).toFixed(2)) : 0;
-
-    // Time estimates (in trading days)
-    const rawDaysToTarget = dailyMovementEstimate > 0 ? distanceToTP / dailyMovementEstimate : 999;
-
-    // Confidence adjustment based on score & trend alignment
-    const confidenceMultiplier = Math.max(0.3, Math.min(2.0, (score > 0 ? score : 50) / 60));
-    const adjustedDaysToTarget = Math.max(1, Math.round(rawDaysToTarget / confidenceMultiplier));
-
-    // Convert to different time units
-    const IDX_TRADING_HOURS_PER_DAY = 6.5; // 09:00-15:30 WIB
-    const TRADING_DAYS_PER_WEEK = 5;
-
-    const estimatedHours = Math.round(adjustedDaysToTarget * IDX_TRADING_HOURS_PER_DAY);
-    const estimatedDays = adjustedDaysToTarget;
-    const estimatedWeeks = parseFloat((adjustedDaysToTarget / TRADING_DAYS_PER_WEEK).toFixed(1));
-
-    // Profit percentage
-    const profitPercent = lastPrice > 0 ? parseFloat(((distanceToTP / lastPrice) * 100).toFixed(2)) : 0;
-    const profitPerDay = estimatedDays > 0 ? parseFloat((profitPercent / estimatedDays).toFixed(2)) : 0;
-    const lossPercent = lastPrice > 0 ? parseFloat(((distanceToSL / lastPrice) * 100).toFixed(2)) : 0;
-
-    // Win Probability Calculation (based on multi-factor alignment)
-    let winProb = 50; // base
-    // RSI alignment
-    if (rsi <= 30) winProb += 12;
-    else if (rsi <= 40) winProb += 6;
-    else if (rsi >= 70) winProb -= 12;
-    else if (rsi >= 60) winProb -= 6;
-    // MACD alignment
-    if (macdLine > macdSignalLine && macdHist > 0) winProb += 10;
-    else if (macdLine > macdSignalLine) winProb += 5;
-    else if (macdLine < macdSignalLine && macdHist < 0) winProb -= 10;
-    else if (macdLine < macdSignalLine) winProb -= 5;
-    // Moving average trend
-    if (sma20 && sma50 && lastPrice > sma20 && lastPrice > sma50) winProb += 8;
-    else if (sma20 && sma50 && lastPrice < sma20 && lastPrice < sma50) winProb -= 8;
-    // Golden/Death Cross
-    if (sma50 && sma200 && sma50 > sma200) winProb += 5;
-    else if (sma50 && sma200 && sma50 < sma200) winProb -= 5;
-    // Volume confirmation
-    if (volRatio > 1.5 && lastPrice > prevPrice) winProb += 7;
-    else if (volRatio > 1.5 && lastPrice < prevPrice) winProb -= 7;
-    // Stochastic
-    if (stochK < 20) winProb += 5;
-    else if (stochK > 80) winProb -= 5;
-    // RRR bonus (good risk:reward boosts confidence)
-    if (riskRewardRatio >= 3) winProb += 5;
-    else if (riskRewardRatio >= 2) winProb += 3;
-    else if (riskRewardRatio < 1) winProb -= 5;
-
-    winProb = Math.max(5, Math.min(95, winProb));
-
-    // Format time estimate as human readable
-    let timeEstimateLabel;
-    if (estimatedDays <= 1) {
-      timeEstimateLabel = `~${estimatedHours} jam`;
-    } else if (estimatedDays <= 5) {
-      timeEstimateLabel = `~${estimatedDays} hari`;
-    } else if (estimatedWeeks <= 4) {
-      timeEstimateLabel = `~${estimatedWeeks} minggu`;
-    } else {
-      timeEstimateLabel = `~${Math.round(estimatedWeeks)} minggu`;
-    }
-
-    const profitEstimation = {
-      estimatedHours,
-      estimatedDays,
-      estimatedWeeks,
-      timeEstimateLabel,
-      profitPercent,
-      profitPerDay,
-      lossPercent,
-      riskRewardRatio,
-      winProbability: winProb,
-      dailyMovement: parseFloat(dailyMovementEstimate.toFixed(2)),
-      atrPercent: parseFloat(atrPercent.toFixed(2)),
-      confidenceLevel: confidenceMultiplier >= 1.2 ? 'HIGH' : confidenceMultiplier >= 0.8 ? 'MEDIUM' : 'LOW',
-    };
-
     // 7. Bull Trap & Bearish / Bullish Divergence Detection Engine (Last 20 bars)
     let divergence = 'NONE';
     if (ohlcv.length >= 20) {
@@ -1153,6 +1049,115 @@ async function analyzeStockForRecommendation(symbol) {
     }
 
     score = Math.max(0, Math.min(100, Math.round(score)));
+
+    // 9. Profit Estimation Engine (Time-Based)
+    const atrPercent = lastPrice > 0 ? (atr / lastPrice) * 100 : 1;
+
+    // Trend direction multiplier from MACD & RSI & Score
+    let trendDirectionMult = 1.0;
+    if (macdLine > macdSignalLine && rsi < 70) {
+      trendDirectionMult = 1.0 + Math.min((macdLine - macdSignalLine) / (Math.abs(macdLine) + 1), 0.5);
+    } else if (macdLine < macdSignalLine && rsi > 30) {
+      trendDirectionMult = 0.5; // bearish trend slows bullish target
+    } else if (rsi >= 70) {
+      trendDirectionMult = 0.3; // overbought reduces upside speed
+    }
+
+    // Volume confirmation factor
+    const volConfirmation = volRatio >= 1.5 ? 1.3 : volRatio >= 1.0 ? 1.0 : 0.7;
+
+    // Daily expected movement toward target (based on ATR, adjusted by trend & volume)
+    const dailyMovementEstimate = atr * trendDirectionMult * volConfirmation;
+
+    // Calculate distances
+    const distanceToTP = Math.abs(atrTakeProfit - lastPrice);
+    const distanceToSL = Math.abs(lastPrice - atrStopLoss);
+
+    // Risk:Reward Ratio
+    const riskRewardRatio = distanceToSL > 0 ? parseFloat((distanceToTP / distanceToSL).toFixed(2)) : 0;
+
+    // Time estimates (in trading days)
+    const rawDaysToTarget = dailyMovementEstimate > 0 ? distanceToTP / dailyMovementEstimate : 999;
+
+    // Confidence adjustment based on score & trend alignment
+    const confidenceMultiplier = Math.max(0.3, Math.min(2.0, (score > 0 ? score : 50) / 60));
+    const adjustedDaysToTarget = Math.max(1, Math.round(rawDaysToTarget / confidenceMultiplier));
+
+    // Convert to different time units
+    const IDX_TRADING_HOURS_PER_DAY = 6.5; // 09:00-15:30 WIB
+    const TRADING_DAYS_PER_WEEK = 5;
+
+    const estimatedHours = Math.round(adjustedDaysToTarget * IDX_TRADING_HOURS_PER_DAY);
+    const estimatedDays = adjustedDaysToTarget;
+    const estimatedWeeks = parseFloat((adjustedDaysToTarget / TRADING_DAYS_PER_WEEK).toFixed(1));
+
+    // Profit percentage
+    const profitPercent = lastPrice > 0 ? parseFloat(((distanceToTP / lastPrice) * 100).toFixed(2)) : 0;
+    const profitPerDay = estimatedDays > 0 ? parseFloat((profitPercent / estimatedDays).toFixed(2)) : 0;
+    const lossPercent = lastPrice > 0 ? parseFloat(((distanceToSL / lastPrice) * 100).toFixed(2)) : 0;
+
+    // Win Probability Calculation (based on multi-factor alignment)
+    let winProb = 50; // base
+    // RSI alignment
+    if (rsi <= 30) winProb += 12;
+    else if (rsi <= 40) winProb += 6;
+    else if (rsi >= 70) winProb -= 12;
+    else if (rsi >= 60) winProb -= 6;
+    // MACD alignment
+    if (macdLine > macdSignalLine && macdHist > 0) winProb += 10;
+    else if (macdLine > macdSignalLine) winProb += 5;
+    else if (macdLine < macdSignalLine && macdHist < 0) winProb -= 10;
+    else if (macdLine < macdSignalLine) winProb -= 5;
+    // Moving average trend
+    if (sma20 && sma50 && lastPrice > sma20 && lastPrice > sma50) winProb += 8;
+    else if (sma20 && sma50 && lastPrice < sma20 && lastPrice < sma50) winProb -= 8;
+    // Golden/Death Cross
+    if (sma50 && sma200 && sma50 > sma200) winProb += 5;
+    else if (sma50 && sma200 && sma50 < sma200) winProb -= 5;
+    // Volume confirmation
+    if (volRatio > 1.5 && lastPrice > prevPrice) winProb += 7;
+    else if (volRatio > 1.5 && lastPrice < prevPrice) winProb -= 7;
+    // Stochastic
+    if (stochK < 20) winProb += 5;
+    else if (stochK > 80) winProb -= 5;
+    // Divergence synergy
+    if (divergence === 'BULLISH_ACCUMULATION') winProb += 8;
+    else if (divergence === 'BEARISH_BULL_TRAP') winProb -= 8;
+    // RRR bonus (good risk:reward boosts confidence)
+    if (riskRewardRatio >= 3) winProb += 5;
+    else if (riskRewardRatio >= 2) winProb += 3;
+    else if (riskRewardRatio < 1) winProb -= 5;
+    // Illiquidity penalty
+    if (isIlliquidTrap) winProb -= 10;
+
+    winProb = Math.max(5, Math.min(95, winProb));
+
+    // Format time estimate as human readable
+    let timeEstimateLabel;
+    if (estimatedDays <= 1) {
+      timeEstimateLabel = `~${estimatedHours} jam`;
+    } else if (estimatedDays <= 5) {
+      timeEstimateLabel = `~${estimatedDays} hari`;
+    } else if (estimatedWeeks <= 4) {
+      timeEstimateLabel = `~${estimatedWeeks} minggu`;
+    } else {
+      timeEstimateLabel = `~${Math.round(estimatedWeeks)} minggu`;
+    }
+
+    const profitEstimation = {
+      estimatedHours,
+      estimatedDays,
+      estimatedWeeks,
+      timeEstimateLabel,
+      profitPercent,
+      profitPerDay,
+      lossPercent,
+      riskRewardRatio,
+      winProbability: winProb,
+      dailyMovement: parseFloat(dailyMovementEstimate.toFixed(2)),
+      atrPercent: parseFloat(atrPercent.toFixed(2)),
+      confidenceLevel: confidenceMultiplier >= 1.2 ? 'HIGH' : confidenceMultiplier >= 0.8 ? 'MEDIUM' : 'LOW',
+    };
 
     let signal;
     if (score >= 75) signal = 'STRONG_BUY';
