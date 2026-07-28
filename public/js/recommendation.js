@@ -129,7 +129,7 @@ const StockRecommendation = {
         container.innerHTML = `
             <div class="rec-loading">
                 <div class="rec-loading-spinner"></div>
-                <span>Menganalisis ${this._getStockCount()} saham blue chip...</span>
+                <span>Menganalisis ${this._getStockCount()} saham di seluruh 11 sektor IDX...</span>
             </div>
         `;
     },
