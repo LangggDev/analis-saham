@@ -6,8 +6,12 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { pool, initDB } from './db.js';
 
 dotenv.config();
+const JWT_SECRET = process.env.JWT_SECRET || 'stockpulse_secret_key_super_secure_2026_jwt_token';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1982,25 +1986,296 @@ function generateFallbackReasoning(stock) {
   return parts.join('. ') + '.';
 }
 
+// ─── Autentikasi Middleware (JWT Token Validator) ───────────────────────────
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || req.query.token;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Akses ditolak: Silakan login terlebih dahulu untuk mengakses fitur ini.' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Sesi login telah berakhir atau token tidak sah. Silakan login kembali.' });
+    req.user = user;
+    next();
+  });
+}
+
+// ─── API: Autentikasi & Akun Pengguna (/api/auth/*) ──────────────────────────
+app.post('/api/auth/register', async (req, res) => {
+  const { username, email, password } = req.body;
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Username, email, dan password wajib diisi.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password minimal harus 6 karakter.' });
+  }
+
+  try {
+    // Cek duplikasi akun
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE username = $1 OR email = $2 LIMIT 1',
+      [username.trim().toLowerCase(), email.trim().toLowerCase()]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Username atau email sudah terdaftar. Silakan gunakan yang lain.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+
+    const newRes = await pool.query(
+      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
+      [username.trim().toLowerCase(), email.trim().toLowerCase(), hash]
+    );
+    const user = newRes.rows[0];
+    const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({ message: 'Registrasi berhasil!', token, user });
+  } catch (err) {
+    console.error('[Auth Register Error]:', err.message);
+    res.status(500).json({ error: 'Gagal mendaftar akun: ' + err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { login, password } = req.body; // login bisa username atau email
+  if (!login || !password) {
+    return res.status(400).json({ error: 'Username/Email dan password wajib diisi.' });
+  }
+
+  try {
+    const userRes = await pool.query(
+      'SELECT * FROM users WHERE username = $1 OR email = $1 LIMIT 1',
+      [login.trim().toLowerCase()]
+    );
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({ error: 'Akun tidak ditemukan atau kombinasi password salah.' });
+    }
+    const user = userRes.rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(401).json({ error: 'Kombinasi password dan akun salah.' });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ message: 'Login berhasil!', token, user: { id: user.id, username: user.username, email: user.email, created_at: user.created_at } });
+  } catch (err) {
+    console.error('[Auth Login Error]:', err.message);
+    res.status(500).json({ error: 'Gagal melakukan login: ' + err.message });
+  }
+});
+
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const uRes = await pool.query('SELECT id, username, email, created_at FROM users WHERE id = $1', [req.user.id]);
+    if (uRes.rows.length === 0) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
+    
+    // Tarik statistik ringkasan evaluasi trading pengguna
+    const statsRes = await pool.query(`
+      SELECT 
+        COUNT(*) as total_trades,
+        COALESCE(SUM(CASE WHEN type = 'SELL' THEN pnl ELSE 0 END), 0) as total_pnl,
+        COUNT(CASE WHEN type = 'SELL' AND pnl > 0 THEN 1 END) as win_count,
+        COUNT(CASE WHEN type = 'SELL' AND pnl <= 0 THEN 1 END) as loss_count
+      FROM transactions 
+      WHERE user_id = $1
+    `, [req.user.id]);
+
+    const stats = statsRes.rows[0];
+    const sellCount = Number(stats.win_count) + Number(stats.loss_count);
+    const winRate = sellCount > 0 ? ((Number(stats.win_count) / sellCount) * 100).toFixed(1) : '0.0';
+
+    res.json({ user: uRes.rows[0], stats: { ...stats, win_rate: winRate } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── API: Jurnal & Evaluasi Transaksi (/api/transactions/*) ─────────────────
+app.get('/api/transactions', authenticateToken, async (req, res) => {
+  try {
+    const txRes = await pool.query(
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_date DESC, id DESC LIMIT 200',
+      [req.user.id]
+    );
+
+    // Hitung analisa performa portfolio (Win Rate, Profit/Loss, Best & Worst)
+    let totalTrades = txRes.rows.length;
+    let totalSellTrades = 0;
+    let winCount = 0;
+    let realizedPnL = 0;
+    let bestWin = 0;
+    let worstLoss = 0;
+    let totalInvested = 0; // estimasi posisi aktif/terbuka (BUY - SELL qty)
+    
+    // Group per symbol to check holdings
+    const holdings = {};
+
+    txRes.rows.forEach(tx => {
+      const sym = tx.symbol;
+      if (!holdings[sym]) holdings[sym] = { qty: 0, cost: 0 };
+
+      if (tx.type === 'BUY') {
+        holdings[sym].qty += Number(tx.quantity);
+        holdings[sym].cost += Number(tx.total_value);
+      } else if (tx.type === 'SELL') {
+        holdings[sym].qty = Math.max(0, holdings[sym].qty - Number(tx.quantity));
+        totalSellTrades++;
+        const pnl = Number(tx.pnl || 0);
+        realizedPnL += pnl;
+        if (pnl > 0) winCount++;
+        if (pnl > bestWin) bestWin = pnl;
+        if (pnl < worstLoss) worstLoss = pnl;
+      }
+    });
+
+    const winRate = totalSellTrades > 0 ? Math.round((winCount / totalSellTrades) * 100) : 0;
+
+    res.json({
+      transactions: txRes.rows,
+      evaluation: {
+        totalTrades,
+        totalSellTrades,
+        winRate,
+        realizedPnL: Math.round(realizedPnL),
+        bestWin: Math.round(bestWin),
+        worstLoss: Math.round(worstLoss),
+        holdings
+      }
+    });
+  } catch (err) {
+    console.error('[Transactions GET Error]:', err.message);
+    res.status(500).json({ error: 'Gagal mengambil data transaksi: ' + err.message });
+  }
+});
+
+app.post('/api/transactions', authenticateToken, async (req, res) => {
+  const { symbol, type, price, quantity, strategy_tag, notes, transaction_date } = req.body;
+  
+  if (!symbol || !type || !price || !quantity) {
+    return res.status(400).json({ error: 'Simbol saham, tipe (BUY/SELL), harga, dan jumlah wajib diisi.' });
+  }
+  const cleanSymbol = symbol.trim().toUpperCase();
+  const txType = type.trim().toUpperCase();
+  const numPrice = Number(price);
+  const numQty = Number(quantity);
+  const totalVal = numPrice * numQty;
+  
+  if (isNaN(numPrice) || numPrice <= 0 || isNaN(numQty) || numQty <= 0) {
+    return res.status(400).json({ error: 'Harga dan jumlah harus berupa angka positif.' });
+  }
+
+  try {
+    let pnl = null;
+    let pnlPercent = null;
+
+    // Jika transaksi adalah JUAL (SELL), hitung Realized P&L otomatis berdasarkan harga rata-rata beli
+    if (txType === 'SELL') {
+      const buyRes = await pool.query(
+        "SELECT SUM(total_value) as sum_val, SUM(quantity) as sum_qty FROM transactions WHERE user_id = $1 AND symbol = $2 AND type = 'BUY'",
+        [req.user.id, cleanSymbol]
+      );
+      const sumVal = Number(buyRes.rows[0]?.sum_val || 0);
+      const sumQty = Number(buyRes.rows[0]?.sum_qty || 0);
+
+      if (sumQty > 0) {
+        const avgBuyPrice = sumVal / sumQty;
+        pnl = (numPrice - avgBuyPrice) * numQty;
+        pnlPercent = ((numPrice - avgBuyPrice) / avgBuyPrice) * 100;
+      } else {
+        // Jika tidak ada data beli sebelumnya di jurnal (misal migrasi portofolio eksternal), anggap P&L berdasarkan estimasi langsung
+        pnl = 0;
+        pnlPercent = 0;
+      }
+    }
+
+    const dateVal = transaction_date ? new Date(transaction_date) : new Date();
+
+    const insertRes = await pool.query(
+      `INSERT INTO transactions (user_id, symbol, type, price, quantity, total_value, transaction_date, strategy_tag, notes, pnl, pnl_percent) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [req.user.id, cleanSymbol, txType, numPrice, numQty, totalVal, dateVal, strategy_tag || 'Standard Trade', notes || '', pnl, pnlPercent]
+    );
+
+    res.status(201).json({ message: 'Transaksi berhasil dicatat!', transaction: insertRes.rows[0] });
+  } catch (err) {
+    console.error('[Transactions POST Error]:', err.message);
+    res.status(500).json({ error: 'Gagal mencatat transaksi: ' + err.message });
+  }
+});
+
+app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
+  try {
+    const delRes = await pool.query(
+      'DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.id]
+    );
+    if (delRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan atau tidak berwenang menghapusnya.' });
+    }
+    res.json({ message: 'Transaksi berhasil dihapus!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── API: Export Laporan Evaluasi to CSV/Excel (/api/transactions/export) ───
+app.get('/api/transactions/export', authenticateToken, async (req, res) => {
+  try {
+    const txRes = await pool.query(
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_date DESC, id DESC',
+      [req.user.id]
+    );
+
+    const rows = txRes.rows;
+    // Header CSV (BOM \uFEFF agar kompatibel 100% dengan Microsoft Excel dan merespons karakter lokal)
+    let csv = '\uFEFF"ID Transaksi","Tanggal","Simbol","Tipe (BUY/SELL)","Harga per Lembar (Rp)","Jumlah Lembar / Qty","Total Nilai Transaksi (Rp)","Realized Profit/Loss (Rp)","Return ROI (%)","Strategi / Tag","Catatan Evaluasi"\r\n';
+
+    rows.forEach(t => {
+      const dateStr = t.transaction_date ? new Date(t.transaction_date).toISOString().replace('T', ' ').slice(0, 19) : '';
+      const pnlStr = t.pnl !== null ? Number(t.pnl).toFixed(2) : '-';
+      const pnlPctStr = t.pnl_percent !== null ? Number(t.pnl_percent).toFixed(2) + '%' : '-';
+      const noteStr = (t.notes || '').replace(/"/g, '""'); // Escape quotes for CSV
+      const tagStr = (t.strategy_tag || '').replace(/"/g, '""');
+
+      csv += `"${t.id}","${dateStr}","${t.symbol}","${t.type}","${t.price}","${t.quantity}","${t.total_value}","${pnlStr}","${pnlPctStr}","${tagStr}","${noteStr}"\r\n`;
+    });
+
+    const filename = `laporan-evaluasi-trading-${req.user.username}-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (err) {
+    console.error('[Export Report Error]:', err.message);
+    res.status(500).json({ error: 'Gagal mengunduh laporan evaluasi: ' + err.message });
+  }
+});
+
 // ─── Fallback: Serve index.html ─────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ─── Start Server ───────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  // Initialize Database on startup
+  await initDB();
+
   console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
-  console.log(`║   📊 StockPulse — Real-Time Stock Analysis Dashboard v2.0  ║`);
+  console.log(`║   📊 StockPulse — Real-Time Stock Analysis Dashboard v3.5  ║`);
   console.log(`╠══════════════════════════════════════════════════════════════╣`);
   console.log(`║   URL: http://localhost:${PORT}                               ║`);
   console.log(`╠══════════════════════════════════════════════════════════════╣`);
   console.log(`║   Endpoints:                                                ║`);
-  console.log(`║   GET /api/quote/:symbol         — Real-time quote          ║`);
-  console.log(`║   GET /api/chart/:symbol         — Historical OHLCV         ║`);
-  console.log(`║   GET /api/search?q=             — Symbol search            ║`);
-  console.log(`║   GET /api/news/:symbol          — Latest news              ║`);
-  console.log(`║   GET /api/summary/:symbol       — Company summary          ║`);
-  console.log(`║   GET /api/fundamental/:symbol   — Fundamental data (NEW)   ║`);
-  console.log(`║   GET /api/market-status/:exch   — Market hours (NEW)       ║`);
+  console.log(`║   GET  /api/quote/:symbol         — Real-time quote         ║`);
+  console.log(`║   GET  /api/chart/:symbol         — Historical OHLCV        ║`);
+  console.log(`║   GET  /api/search?q=             — Symbol search           ║`);
+  console.log(`║   GET  /api/fundamental/:symbol   — Fundamental data        ║`);
+  console.log(`║   POST /api/auth/login & register — Auth & Accounts (NEW)   ║`);
+  console.log(`║   GET/POST/DELETE /api/transactions — Trading Journal (NEW) ║`);
+  console.log(`║   GET  /api/transactions/export   — Unduh Laporan (CSV/XLS) ║`);
   console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
 });
+

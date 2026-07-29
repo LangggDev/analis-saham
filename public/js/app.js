@@ -1763,6 +1763,11 @@ class App {
             StockRecommendation.loadTomorrow();
             StockRecommendation.startAutoRefresh();
         }
+
+        // Load trading journal & evaluation when journal tab is selected
+        if (tabName === 'journal' && typeof window.JournalManager !== 'undefined') {
+            window.JournalManager.loadAndRenderJournal();
+        }
     }
 
     /* ---- Pre-Order Form ---- */
