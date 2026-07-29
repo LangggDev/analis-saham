@@ -411,6 +411,7 @@ const StockRecommendation = {
                 </div>
                 ${detailsHTML}
                 <div class="rec-card-indicators">
+                    ${pick.tradingViewRating && pick.tradingViewRating !== 'N/A' ? `<span class="rec-indicator rec-ind-tv rec-ind-tv-${pick.tradingViewRating.toLowerCase().replace(/_/g, '-')}" title="TradingView Official Screener Rating (Score: ${pick.tvRecommendScore ?? 0})">⚡ TV: ${pick.tradingViewRating.replace(/_/g, ' ')}</span>` : ''}
                     <span class="rec-indicator" title="RSI">RSI: ${pick.rsi || '—'}</span>
                     <span class="rec-indicator" title="Volume Ratio">Vol: ${pick.volRatio || '—'}x</span>
                     ${pick.vwap ? `<span class="rec-indicator" title="VWAP">VWAP: ${fmtPrice(pick.vwap)}</span>` : ''}

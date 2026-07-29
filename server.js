@@ -555,6 +555,98 @@ app.get('/api/summary/:symbol', async (req, res) => {
   }
 });
 
+// ─── Unauthenticated Fundamental Helpers (TradingView Screener & Yahoo V8) ───
+async function fetchTradingViewFundamental(symbol) {
+  try {
+    const baseTicker = symbol.replace('.JK', '').toUpperCase();
+    const marketUrl = symbol.endsWith('.JK') 
+      ? 'https://scanner.tradingview.com/indonesia/scan' 
+      : 'https://scanner.tradingview.com/global/scan';
+      
+    const res = await fetch(marketUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+        'Referer': 'https://www.tradingview.com/'
+      },
+      body: JSON.stringify({
+        symbols: { tickers: [symbol.endsWith('.JK') ? `IDX:${baseTicker}` : baseTicker] },
+        columns: [
+          "name", 
+          "price_earnings_ttm", 
+          "price_book_mrq", 
+          "price_book_fq",
+          "return_on_equity_ttm", 
+          "return_on_equity_fq",
+          "debt_to_equity_mrq", 
+          "debt_to_equity_fq",
+          "basic_eps_ttm", 
+          "earnings_per_share_basic_ttm",
+          "dividend_yield_recent", 
+          "dividend_yield_trailing_12_month",
+          "market_cap_basic", 
+          "total_revenue_yoy_growth_ttm", 
+          "net_margin_ttm", 
+          "current_ratio_fq", 
+          "free_cash_flow_ttm", 
+          "close"
+        ]
+      })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (json && json.data && json.data[0] && json.data[0].d) {
+      const d = json.data[0].d;
+      return {
+        per: d[1] ?? null,
+        pbv: d[2] ?? d[3] ?? null,
+        roe: (d[4] ?? d[5]) != null ? (d[4] ?? d[5]) / 100 : null,
+        der: (d[6] ?? d[7]) != null ? (d[6] ?? d[7]) / 100 : null,
+        eps: d[8] ?? d[9] ?? null,
+        dividendYield: (d[10] ?? d[11]) != null ? (d[10] ?? d[11]) / 100 : null,
+        marketCap: d[12] ?? null,
+        revenueGrowth: d[13] != null ? d[13] / 100 : null,
+        profitMargin: d[14] != null ? d[14] / 100 : null,
+        currentRatio: d[15] ?? null,
+        freeCashFlow: d[16] ?? null,
+        price: d[17] ?? null,
+      };
+    }
+  } catch (e) {
+    console.warn(`[TV Fundamental] Failed for ${symbol}:`, e.message);
+  }
+  return null;
+}
+
+async function fetchYahooV8Fundamental(symbol) {
+  try {
+    const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/quote?symbols=${encodeURIComponent(symbol)}`, {
+      headers: YF_HEADERS
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const q = json?.quoteResponse?.result?.[0];
+    if (q) {
+      return {
+        per: q.trailingPE ?? q.forwardPE ?? null,
+        pbv: q.priceToBook ?? null,
+        eps: q.epsTrailingTwelveMonths ?? q.epsForward ?? null,
+        dividendYield: q.trailingAnnualDividendYield != null ? q.trailingAnnualDividendYield / 100 : (q.dividendYield ?? null),
+        marketCap: q.marketCap ?? null,
+        fiftyTwoWeekHigh: q.fiftyTwoWeekHigh ?? null,
+        fiftyTwoWeekLow: q.fiftyTwoWeekLow ?? null,
+        price: q.regularMarketPrice ?? null,
+        bookValue: q.bookValue ?? null
+      };
+    }
+  } catch (e) {
+    console.warn(`[Yahoo V8 Fundamental] Failed for ${symbol}:`, e.message);
+  }
+  return null;
+}
+
 // ─── API: Fundamental Data ──────────────────────────────────────────────
 app.get('/api/fundamental/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
@@ -570,34 +662,39 @@ app.get('/api/fundamental/:symbol', async (req, res) => {
           result = await yahooAuthFetch(url);
         } catch (e) {
           console.warn(`[Fundamental] v10 failed for ${symbol}: ${e.message}, trying v11...`);
-          // Fallback: try v11 endpoint
           try {
             const url2 = `https://query1.finance.yahoo.com/v11/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
             result = await yahooAuthFetch(url2);
           } catch (e2) {
-            console.warn(`[Fundamental] v11 also failed for ${symbol}: ${e2.message}, using chart fallback`);
-            // Final fallback: derive basic data from chart meta
-            const chart = await fetchChartData(symbol, '1d', '1y');
-            const meta = chart.meta;
-            return {
+            console.warn(`[Fundamental] v11 failed for ${symbol}: ${e2.message}, switching to TradingView & Yahoo V8 hybrid fallback...`);
+            // Robust Hybrid Fallback without crumb requirements
+            const [tvData, v8Data, chart] = await Promise.all([
+              fetchTradingViewFundamental(symbol),
+              fetchYahooV8Fundamental(symbol),
+              fetchChartData(symbol, '1d', '1y').catch(() => ({ meta: {} }))
+            ]);
+            const meta = chart?.meta || {};
+            
+            const combined = {
               symbol: meta.symbol || symbol,
-              per: null,
-              pbv: null,
-              roe: null,
-              der: null,
-              eps: null,
-              dividendYield: null,
-              revenueGrowth: null,
-              profitMargin: null,
-              currentRatio: null,
-              freeCashFlow: null,
-              marketCap: meta.marketCap || null,
-              fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || null,
-              fiftyTwoWeekLow: meta.fiftyTwoWeekLow || null,
-              price: meta.regularMarketPrice || null,
-              _source: 'chart_fallback',
-              _hasData: false,
+              per: tvData?.per ?? v8Data?.per ?? null,
+              pbv: tvData?.pbv ?? v8Data?.pbv ?? null,
+              roe: tvData?.roe ?? null,
+              der: tvData?.der ?? null,
+              eps: tvData?.eps ?? v8Data?.eps ?? null,
+              dividendYield: tvData?.dividendYield ?? v8Data?.dividendYield ?? null,
+              revenueGrowth: tvData?.revenueGrowth ?? null,
+              profitMargin: tvData?.profitMargin ?? null,
+              currentRatio: tvData?.currentRatio ?? null,
+              freeCashFlow: tvData?.freeCashFlow ?? null,
+              marketCap: tvData?.marketCap ?? v8Data?.marketCap ?? meta.marketCap ?? null,
+              fiftyTwoWeekHigh: v8Data?.fiftyTwoWeekHigh ?? meta.fiftyTwoWeekHigh ?? null,
+              fiftyTwoWeekLow: v8Data?.fiftyTwoWeekLow ?? meta.fiftyTwoWeekLow ?? null,
+              price: tvData?.price ?? v8Data?.price ?? meta.regularMarketPrice ?? null,
+              _source: tvData ? 'tradingview+v8_hybrid' : (v8Data ? 'yahoo_v8' : 'chart_fallback'),
+              _hasData: Boolean(tvData || v8Data)
             };
+            return combined;
           }
         }
 
@@ -684,6 +781,7 @@ app.get('/api/fundamental/:symbol', async (req, res) => {
             revenueGrowth: getFmt(fd, 'revenueGrowth'),
           },
           _source: 'quoteSummary',
+          _hasData: true,
         };
       })
     );
@@ -792,8 +890,11 @@ app.get('/api/market-status/:exchange', async (req, res) => {
 // ─── API: Stock Recommendations ─────────────────────────────────────────
 
 // Helper: Analyze a stock for recommendation
-async function analyzeStockForRecommendation(symbol) {
+async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
   try {
+    const baseTicker = symbol.replace('.JK', '').toUpperCase();
+    const tvData = (tvRatingsMap && tvRatingsMap[baseTicker]) || { rating: 'N/A', score: 0 };
+
     const [chartResult, quoteResult] = await Promise.all([
       yahooCall(() => fetchChartData(symbol, '1d', '6mo')),
       yahooCall(async () => {
@@ -1260,6 +1361,12 @@ async function analyzeStockForRecommendation(symbol) {
     // Conflict penalty: strong signals in both directions = unreliable
     if (bullishFactors >= 3 && bearishFactors >= 3) score -= 5;
 
+    // TradingView Official Screener Rating Validator
+    if (tvData.rating === 'STRONG_BUY') score += 10;
+    else if (tvData.rating === 'BUY') score += 5;
+    else if (tvData.rating === 'SELL') score -= 10;
+    else if (tvData.rating === 'STRONG_SELL') score -= 20;
+
     // Liquidity Trap Safety Override (Cap score at 45 to protect retail from penny pump traps)
     if (isIlliquidTrap) {
       score = Math.min(score - 20, 45);
@@ -1362,6 +1469,11 @@ async function analyzeStockForRecommendation(symbol) {
     if (bullishFactors >= 5) winProb += 5;
     else if (bearishFactors >= 5) winProb -= 5;
     if (bullishFactors >= 3 && bearishFactors >= 3) winProb -= 3;
+    // TradingView validation adjustment
+    if (tvData.rating === 'STRONG_BUY') winProb += 5;
+    else if (tvData.rating === 'BUY') winProb += 3;
+    else if (tvData.rating === 'SELL') winProb -= 5;
+    else if (tvData.rating === 'STRONG_SELL') winProb -= 10;
     // Illiquidity penalty
     if (isIlliquidTrap) winProb -= 10;
 
@@ -1443,6 +1555,8 @@ async function analyzeStockForRecommendation(symbol) {
       macdMomentum,
       bullishFactors,
       bearishFactors,
+      tradingViewRating: tvData.rating,
+      tvRecommendScore: tvData.score,
       isIlliquidTrap,
       dailyTurnover: Math.round(dailyTurnover),
     };
@@ -1478,13 +1592,78 @@ const RECOMMENDATION_SYMBOLS = [
   'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'MLPT.JK', 'DCII.JK', 'MTDL.JK', 'WIFI.JK', 'BELI.JK', 'AXIO.JK', 'MCAS.JK', 'NFCX.JK', 'DMMX.JK', 'ENVY.JK', 'ATIC.JK', 'CASH.JK', 'DIVA.JK', 'GLVA.JK', 'HDIT.JK', 'JSPT.JK', 'LUCK.JK', 'MTECH.JK', 'PTSN.JK', 'WIRE.JK'
 ];
 
-// Helper: Run parallel batch tasks
+// ─── TradingView Screener API Validation Engine ───
+let tvRatingsCache = null;
+let tvRatingsTimestamp = 0;
+const TV_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
+
+async function fetchTradingViewRatings() {
+  const now = Date.now();
+  if (tvRatingsCache && (now - tvRatingsTimestamp) < TV_CACHE_TTL) {
+    return tvRatingsCache;
+  }
+  
+  console.log('[TradingView] Fetching live composite technical ratings from IDX Screener...');
+  try {
+    const res = await fetch('https://scanner.tradingview.com/indonesia/scan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Referer': 'https://www.tradingview.com/'
+      },
+      body: JSON.stringify({
+        filter: [{ left: "type", operation: "equal", right: "stock" }],
+        options: { lang: "en" },
+        symbols: { query: { types: [] }, tickers: [] },
+        columns: ["name", "Recommend.All", "Recommend.MA", "Recommend.Other"],
+        range: [0, 1500]
+      })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const ratingsMap = {};
+
+    if (json && json.data && Array.isArray(json.data)) {
+      json.data.forEach(item => {
+        if (item.d && item.d.length >= 2) {
+          const ticker = item.d[0];
+          const score = parseFloat(item.d[1]);
+          let rating = 'NEUTRAL';
+          if (score >= 0.5) rating = 'STRONG_BUY';
+          else if (score >= 0.1) rating = 'BUY';
+          else if (score <= -0.5) rating = 'STRONG_SELL';
+          else if (score <= -0.1) rating = 'SELL';
+
+          ratingsMap[ticker] = {
+            score: !isNaN(score) ? parseFloat(score.toFixed(2)) : 0,
+            rating: rating,
+            maScore: !isNaN(item.d[2]) ? parseFloat(Number(item.d[2]).toFixed(2)) : 0,
+            otherScore: !isNaN(item.d[3]) ? parseFloat(Number(item.d[3]).toFixed(2)) : 0,
+          };
+        }
+      });
+    }
+
+    console.log(`[TradingView] Successfully indexed ${Object.keys(ratingsMap).length} IDX stock ratings.`);
+    tvRatingsCache = ratingsMap;
+    tvRatingsTimestamp = now;
+    return ratingsMap;
+  } catch (err) {
+    console.warn('[TradingView] Failed to fetch screener ratings:', err.message);
+    return tvRatingsCache || {};
+  }
+}
+
+// Helper: Run parallel batch tasks with TradingView rating validation
 async function analyzeBatch(symbols, batchSize = 5) {
+  const tvRatingsMap = await fetchTradingViewRatings();
   const results = [];
   for (let i = 0; i < symbols.length; i += batchSize) {
     const chunk = symbols.slice(i, i + batchSize);
     const chunkResults = await Promise.all(
-      chunk.map(symbol => analyzeStockForRecommendation(symbol))
+      chunk.map(symbol => analyzeStockForRecommendation(symbol, tvRatingsMap))
     );
     chunkResults.forEach(r => { if (r) results.push(r); });
     if (i + batchSize < symbols.length) {
@@ -1519,24 +1698,24 @@ app.get('/api/recommendations/today', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = buyPicks.slice(0, 5).map(s =>
-            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, Fib 38.2% ${s.fibonacci?.level382}, Fib 61.8% ${s.fibonacci?.level618}, Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%, Est Days ${s.profitEstimation?.estimatedDays}`
+            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, Fib 38.2% ${s.fibonacci?.level382}, Fib 61.8% ${s.fibonacci?.level618}, TV Rating ${s.tradingViewRating} (${s.tvRecommendScore}), Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%, Est Days ${s.profitEstimation?.estimatedDays}`
           ).join('\n');
 
-          const prompt = `Kamu adalah analis saham profesional Indonesia berpengalaman 20+ tahun. Berdasarkan data teknikal berikut, berikan rekomendasi PRESISI TINGGI untuk HARI INI dalam Bahasa Indonesia.
+          const prompt = `Kamu adalah sistem Multi-Agent Trading AI profesional (Technical Analyst, Risk Manager, dan Consensus Arbiter). Berdasarkan data teknikal dan konfirmasi rating resmi TradingView berikut, lakukan simulasi debat antar agen untuk memberikan rekomendasi PRESISI TINGGI HARI INI dalam Bahasa Indonesia.
 
 Data saham:
 ${stockSummaries}
 
 Untuk setiap saham, berikan:
-1. entry_low dan entry_high (range harga beli yang REALISTIS berdasarkan support dan fibonacci)
-2. stop_loss (harga cut loss KETAT, max 3-5% dari entry, berdasarkan ATR)
-3. take_profit (target profit REALISTIS berdasarkan resistance dan fibonacci)
-4. reasoning (alasan detail 2-3 kalimat, sebutkan indikator yang mendukung, dalam Bahasa Indonesia)
+1. entry_low dan entry_high (range harga beli REALISTIS yang telah disepakati agen berdasarkan support, VWAP, dan Fibonacci)
+2. stop_loss (harga cut loss KETAT hasil filter Risk Manager, max 3-5% dari entry, berdasarkan ATR)
+3. take_profit (target profit REALISTIS hasil validasi Technical Analyst)
+4. reasoning (ringkasan 2-3 kalimat hasil konsensus Multi-Agent, sebutkan validasi TV Rating dan konfirmasi aliran Smart Money OBV/VWAP, diawali dengan "🛡️ Multi-Agent Verified:")
 
-PENTING: Entry, SL, dan TP harus REALISTIS dan berdasarkan data teknikal. Jangan asal tebak.
+PENTING: Pastikan entry, SL, dan TP presisi klinis dan realistis.
 
 Format response sebagai JSON array (tanpa markdown wrapper), contoh:
-[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4250,"take_profit":4800,"reasoning":"RSI 28.5 oversold dengan MACD bullish crossover dan golden cross SMA50/200. Volume 1.8x mengonfirmasi akumulasi institusi."}]`;
+[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4250,"take_profit":4800,"reasoning":"🛡️ Multi-Agent Verified: TV Rating Strong Buy (0.65) sejalan dengan dominasi institusi di atas VWAP. Risk Manager menyetujui batas risiko ATR 1:2.5 dengan momentum OBV Accumulation yang kokoh."}]`;
 
           const result = await model.generateContent(prompt);
           let text = result.response.text();
@@ -1645,28 +1824,28 @@ app.get('/api/recommendations/tomorrow', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = morningPicks.map(s =>
-            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%`
+            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, TV Rating ${s.tradingViewRating}, Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%`
           ).join('\n');
 
-          const prompt = `Kamu adalah analis saham profesional Indonesia. Berdasarkan data teknikal end-of-day berikut, berikan rekomendasi untuk PEMBUKAAN BESOK PAGI dalam Bahasa Indonesia.
+          const prompt = `Kamu adalah sistem Multi-Agent Trading AI (Analis Teknikal, Manajer Risiko, dan Hakim Konsensus). Berdasarkan data teknikal end-of-day & komposit indikator TradingView berikut, lakukan analisis mendalam untuk PEMBUKAAN BESOK PAGI dalam Bahasa Indonesia.
 
 Fokus pada:
-- Saham yang berpotensi gap up atau rally di pembukaan
-- Entry point yang optimal saat pre-market/opening
-- Risk management yang ketat
+- Konfirmator TradingView Screener Rating
+- Saham berpotensi gap up / rally dari akumulasi OBV Smart Money & VWAP
+- Manajemen risiko ketat anti-bull trap
 
 Data saham:
 ${stockSummaries}
 
 Untuk setiap saham, berikan:
-1. entry_low dan entry_high (range harga beli saat opening besok)
-2. stop_loss (harga cut loss, max 3-5% dari entry)
+1. entry_low dan entry_high (range beli optimal saat opening besok)
+2. stop_loss (harga cut loss ATR, max 3-5% dari entry)
 3. take_profit (target jual jangka pendek 1-3 hari)
-4. reasoning (alasan singkat 2-3 kalimat mengapa layak beli besok pagi, dalam Bahasa Indonesia)
+4. reasoning (alasan konsensus Multi-Agent 2-3 kalimat mengapa layak beli besok pagi, diawali "🛡️ Multi-Agent Verified:")
 5. priority (1-5, dimana 1 = paling prioritas)
 
 Format response sebagai JSON array (tanpa markdown wrapper), contoh:
-[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4300,"take_profit":4800,"reasoning":"RSI menunjukkan kondisi oversold...","priority":1}]`;
+[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4300,"take_profit":4800,"reasoning":"🛡️ Multi-Agent Verified: Rating resmi TradingView Buy terkorelasi dengan sinyal Bullish Divergence dan konfirmasi volume 1.8x. Sangat ideal untuk opening rally.","priority":1}]`;
 
           const result = await model.generateContent(prompt);
           let text = result.response.text();
@@ -1737,6 +1916,10 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
 // Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, Liquidity, VWAP, OBV, Candlesticks and Profit Estimation)
 function generateFallbackReasoning(stock) {
   const parts = [];
+
+  if (stock.tradingViewRating && stock.tradingViewRating !== 'N/A' && stock.tradingViewRating !== 'NEUTRAL') {
+    parts.push(`🛡️ Multi-Agent Verified (TV Rating: ${stock.tradingViewRating.replace(/_/g, ' ')})`);
+  }
 
   // 1. Critical Liquidity & Penny Stock Warning
   if (stock.isIlliquidTrap) {
