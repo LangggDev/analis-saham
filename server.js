@@ -8,7 +8,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { pool, initDB } from './db.js';
+import { pool, initDB, ensureDB } from './db.js';
 
 dotenv.config();
 const JWT_SECRET = process.env.JWT_SECRET || 'stockpulse_secret_key_super_secure_2026_jwt_token';
@@ -2004,6 +2004,7 @@ function authenticateToken(req, res, next) {
 
 // ─── API: Autentikasi & Akun Pengguna (/api/auth/*) ──────────────────────────
 app.post('/api/auth/register', async (req, res) => {
+  await ensureDB();
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email, dan password wajib diisi.' });

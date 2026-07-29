@@ -81,3 +81,11 @@ export async function initDB() {
     if (client) client.release();
   }
 }
+
+let dbInitPromise = null;
+export async function ensureDB() {
+  if (!dbInitPromise) {
+    dbInitPromise = initDB();
+  }
+  return await dbInitPromise;
+}
