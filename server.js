@@ -959,7 +959,139 @@ async function analyzeStockForRecommendation(symbol) {
     const riskAmount = Math.max(lastPrice - atrStopLoss, lastPrice * 0.02);
     const atrTakeProfit = Math.round(lastPrice + Math.max(riskAmount * 2, resistance - lastPrice, 3 * atr));
 
-    // 6b. Fibonacci Retracement Levels (last 60 bars swing)
+    // ═══════════════════════════════════════════════════════════════
+    // 6b. VWAP (Volume-Weighted Average Price) — Institutional Benchmark
+    // ═══════════════════════════════════════════════════════════════
+    let vwap = lastPrice; // fallback
+    {
+      let cumTPV = 0, cumVol = 0;
+      for (let i = 0; i < ohlcv.length; i++) {
+        const typicalPrice = (ohlcv[i].high + ohlcv[i].low + ohlcv[i].close) / 3;
+        cumTPV += typicalPrice * ohlcv[i].volume;
+        cumVol += ohlcv[i].volume;
+      }
+      if (cumVol > 0) vwap = cumTPV / cumVol;
+    }
+    const vwapDeviation = lastPrice > 0 ? ((lastPrice - vwap) / vwap) * 100 : 0;
+    // Positive = price above VWAP (bullish institutional positioning)
+    // Negative = price below VWAP (bearish institutional positioning)
+
+    // ═══════════════════════════════════════════════════════════════
+    // 6c. OBV (On-Balance Volume) — Smart Money Flow Detection
+    // ═══════════════════════════════════════════════════════════════
+    const obvValues = [];
+    let obv = 0;
+    for (let i = 0; i < ohlcv.length; i++) {
+      if (i === 0) { obv = ohlcv[i].volume; }
+      else if (ohlcv[i].close > ohlcv[i - 1].close) { obv += ohlcv[i].volume; }
+      else if (ohlcv[i].close < ohlcv[i - 1].close) { obv -= ohlcv[i].volume; }
+      obvValues.push(obv);
+    }
+    // OBV trend: compare last 10 bars slope
+    let obvTrend = 'FLAT'; // RISING, FALLING, FLAT
+    if (obvValues.length >= 10) {
+      const obvRecent = obvValues.slice(-5).reduce((a, b) => a + b, 0) / 5;
+      const obvPrev = obvValues.slice(-10, -5).reduce((a, b) => a + b, 0) / 5;
+      const obvChange = obvPrev !== 0 ? ((obvRecent - obvPrev) / Math.abs(obvPrev)) * 100 : 0;
+      if (obvChange > 3) obvTrend = 'RISING';
+      else if (obvChange < -3) obvTrend = 'FALLING';
+    }
+    // Key detection: OBV vs Price divergence (smart money detection)
+    const priceRising = lastPrice > prevPrice;
+    const obvDivergence = (obvTrend === 'FALLING' && priceRising) ? 'DISTRIBUTION'
+                        : (obvTrend === 'RISING' && !priceRising) ? 'ACCUMULATION'
+                        : 'CONFIRMED';
+
+    // ═══════════════════════════════════════════════════════════════
+    // 6d. Candlestick Pattern Detection (last 2-3 bars)
+    // ═══════════════════════════════════════════════════════════════
+    let candlestickPattern = 'NONE';
+    let candlestickScore = 0;
+    if (ohlcv.length >= 3) {
+      const curr = ohlcv[ohlcv.length - 1];
+      const prev1 = ohlcv[ohlcv.length - 2];
+      const currBody = Math.abs(curr.close - curr.open);
+      const currRange = curr.high - curr.low;
+      const prev1Body = Math.abs(prev1.close - prev1.open);
+      const currBullish = curr.close > curr.open;
+      const prev1Bullish = prev1.close > prev1.open;
+
+      // Bullish Engulfing: prev bearish candle fully engulfed by curr bullish candle
+      if (currBullish && !prev1Bullish && curr.open <= prev1.close && curr.close >= prev1.open && currBody > prev1Body) {
+        candlestickPattern = 'BULLISH_ENGULFING';
+        candlestickScore = 8;
+      }
+      // Bearish Engulfing: prev bullish candle fully engulfed by curr bearish candle
+      else if (!currBullish && prev1Bullish && curr.open >= prev1.close && curr.close <= prev1.open && currBody > prev1Body) {
+        candlestickPattern = 'BEARISH_ENGULFING';
+        candlestickScore = -8;
+      }
+      // Hammer (bullish reversal): small body at top, long lower shadow, in downtrend
+      else if (currRange > 0 && currBody / currRange < 0.35 && (curr.close - curr.low) / currRange > 0.6 && lastPrice < prevPrice) {
+        candlestickPattern = 'HAMMER';
+        candlestickScore = 6;
+      }
+      // Inverted Hammer / Shooting Star detection
+      else if (currRange > 0 && currBody / currRange < 0.35 && (curr.high - Math.max(curr.open, curr.close)) / currRange > 0.6) {
+        if (lastPrice < prevPrice) {
+          candlestickPattern = 'INVERTED_HAMMER'; // bullish reversal in downtrend
+          candlestickScore = 5;
+        } else {
+          candlestickPattern = 'SHOOTING_STAR'; // bearish reversal in uptrend
+          candlestickScore = -6;
+        }
+      }
+      // Doji (indecision): body < 10% of range
+      else if (currRange > 0 && currBody / currRange < 0.1) {
+        candlestickPattern = 'DOJI';
+        candlestickScore = -3; // reduces confidence
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 6e. MACD Histogram Momentum (Acceleration / Deceleration)
+    // ═══════════════════════════════════════════════════════════════
+    let macdMomentum = 'NEUTRAL'; // ACCELERATING, DECELERATING, NEUTRAL, ZERO_CROSS_BULL, ZERO_CROSS_BEAR
+    let macdMomentumScore = 0;
+    if (macdHistory.length >= 3) {
+      const hist1 = macdHistory[macdHistory.length - 1] - (macdHistory.length >= 2 ? calcEMA(macdHistory.slice(0, -0), 9) : 0);
+      // Simpler: compare last 3 histogram values for momentum direction
+      const h = macdHistory.slice(-3);
+      const signalVals = [];
+      let tmpSig = h[0];
+      for (let i = 0; i < h.length; i++) {
+        tmpSig = h[i] * (2/10) + tmpSig * (8/10);
+        signalVals.push(h[i] - tmpSig);
+      }
+      // Use raw MACD history diffs for momentum detection
+      const currHist = macdHist;
+      const prevHist2 = macdHistory.length >= 3 ? macdHistory[macdHistory.length - 2] - (calcEMA(macdHistory.slice(0, -1), 9) || 0) : 0;
+      const prevHist3 = macdHistory.length >= 4 ? macdHistory[macdHistory.length - 3] - (calcEMA(macdHistory.slice(0, -2), 9) || 0) : 0;
+
+      if (currHist > 0 && currHist > prevHist2 && prevHist2 > prevHist3) {
+        macdMomentum = 'ACCELERATING_BULL';
+        macdMomentumScore = 5;
+      } else if (currHist < 0 && currHist < prevHist2 && prevHist2 < prevHist3) {
+        macdMomentum = 'ACCELERATING_BEAR';
+        macdMomentumScore = -5;
+      } else if (currHist > 0 && Math.abs(currHist) < Math.abs(prevHist2)) {
+        macdMomentum = 'DECELERATING_BULL';
+        macdMomentumScore = -3; // losing momentum
+      } else if (currHist < 0 && Math.abs(currHist) < Math.abs(prevHist2)) {
+        macdMomentum = 'DECELERATING_BEAR';
+        macdMomentumScore = 3; // bearish momentum weakening = mildly bullish
+      }
+      // Zero-line crossover
+      if (prevHist2 < 0 && currHist > 0) {
+        macdMomentum = 'ZERO_CROSS_BULL';
+        macdMomentumScore = 7;
+      } else if (prevHist2 > 0 && currHist < 0) {
+        macdMomentum = 'ZERO_CROSS_BEAR';
+        macdMomentumScore = -7;
+      }
+    }
+
+    // 6f. Fibonacci Retracement Levels (last 60 bars swing)
     const fibLookback = Math.min(60, ohlcv.length);
     const fibSlice = ohlcv.slice(-fibLookback);
     const fibHigh = Math.max(...fibSlice.map(d => d.high));
@@ -974,21 +1106,41 @@ async function analyzeStockForRecommendation(symbol) {
       level786: parseFloat((fibHigh - fibRange * 0.786).toFixed(0)),
       level1: parseFloat(fibLow.toFixed(0)),
     };
-
-    // 7. Bull Trap & Bearish / Bullish Divergence Detection Engine (Last 20 bars)
+    // ═══════════════════════════════════════════════════════════════
+    // 7. Enhanced Multi-Indicator Divergence Detection (Last 20 bars)
+    //    Combines RSI divergence + OBV divergence + MACD histogram divergence
+    // ═══════════════════════════════════════════════════════════════
     let divergence = 'NONE';
+    let divergenceStrength = 0; // 0 = none, 1 = single, 2 = double, 3 = triple confirmation
     if (ohlcv.length >= 20) {
       const pastSlice = ohlcv.slice(-20, -3);
       const maxPastClose = Math.max(...pastSlice.map(d => d.close));
       const minPastClose = Math.min(...pastSlice.map(d => d.close));
-      
-      // Bearish Divergence (Bull Trap): New price high without momentum support (< 58)
-      if (lastPrice >= maxPastClose * 0.995 && rsi < 58) {
+
+      // Individual divergence checks
+      const rsiDivBearish = lastPrice >= maxPastClose * 0.995 && rsi < 58;
+      const rsiDivBullish = lastPrice <= minPastClose * 1.005 && rsi > 35;
+      const obvDivBearish = obvDivergence === 'DISTRIBUTION'; // OBV falling while price rising
+      const obvDivBullish = obvDivergence === 'ACCUMULATION'; // OBV rising while price falling
+      const macdDivBearish = macdMomentum === 'DECELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BEAR';
+      const macdDivBullish = macdMomentum === 'ACCELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BULL';
+
+      // Count confirmations
+      const bearishCount = [rsiDivBearish, obvDivBearish, macdDivBearish].filter(Boolean).length;
+      const bullishCount = [rsiDivBullish, obvDivBullish, macdDivBullish].filter(Boolean).length;
+
+      if (bearishCount >= 2) {
         divergence = 'BEARISH_BULL_TRAP';
-      }
-      // Bullish Divergence (Accumulation Reversal): New price low while RSI forms higher ground (> 35)
-      else if (lastPrice <= minPastClose * 1.005 && rsi > 35) {
+        divergenceStrength = bearishCount;
+      } else if (bullishCount >= 2) {
         divergence = 'BULLISH_ACCUMULATION';
+        divergenceStrength = bullishCount;
+      } else if (bearishCount === 1 && rsiDivBearish) {
+        divergence = 'BEARISH_BULL_TRAP';
+        divergenceStrength = 1;
+      } else if (bullishCount === 1 && rsiDivBullish) {
+        divergence = 'BULLISH_ACCUMULATION';
+        divergenceStrength = 1;
       }
     }
 
@@ -996,7 +1148,11 @@ async function analyzeStockForRecommendation(symbol) {
     const dailyTurnover = avgVol * lastPrice;
     const isIlliquidTrap = symbol.endsWith('.JK') && (lastPrice <= 60 || (dailyTurnover < 250000000 && lastPrice < 5000) || avgVol < 15000);
 
-    // Multi-Factor Precision Scoring (0-100)
+    // ═══════════════════════════════════════════════════════════════
+    // Multi-Factor Precision Scoring v2.0 (0-100)
+    // Now with VWAP, OBV, Candlestick, MACD Momentum, 52-Week,
+    // and Synergy/Conflict Intelligence
+    // ═══════════════════════════════════════════════════════════════
     let score = 50;
 
     // RSI Factor (+/- 20)
@@ -1039,9 +1195,70 @@ async function analyzeStockForRecommendation(symbol) {
     if (stochK < 20) score += 10;
     else if (stochK > 80) score -= 10;
 
-    // Divergence Synergy (+/- 15)
-    if (divergence === 'BULLISH_ACCUMULATION') score += 15;
-    else if (divergence === 'BEARISH_BULL_TRAP') score -= 15;
+    // Divergence Synergy (+/- 20 based on confirmation strength)
+    if (divergence === 'BULLISH_ACCUMULATION') {
+      score += divergenceStrength >= 2 ? 20 : 12;
+    } else if (divergence === 'BEARISH_BULL_TRAP') {
+      score -= divergenceStrength >= 2 ? 20 : 12;
+    }
+
+    // ── NEW: VWAP Institutional Factor (+/- 8) ──
+    if (vwapDeviation > 2) score += 8;        // clearly above VWAP = institutional buying
+    else if (vwapDeviation > 0.5) score += 4;  // slightly above
+    else if (vwapDeviation < -2) score -= 8;   // clearly below VWAP = institutional selling
+    else if (vwapDeviation < -0.5) score -= 4; // slightly below
+
+    // ── NEW: OBV Smart Money Factor (+/- 12) ──
+    if (obvDivergence === 'ACCUMULATION') score += 12;     // smart money accumulating (very bullish!)
+    else if (obvDivergence === 'DISTRIBUTION') score -= 12; // smart money distributing (very bearish!)
+    else if (obvTrend === 'RISING' && priceRising) score += 5;  // confirmed uptrend
+    else if (obvTrend === 'FALLING' && !priceRising) score -= 5; // confirmed downtrend
+
+    // ── NEW: Candlestick Pattern Factor ──
+    score += candlestickScore;
+
+    // ── NEW: MACD Histogram Momentum Factor ──
+    score += macdMomentumScore;
+
+    // ── NEW: 52-Week Position Factor (+/- 7) ──
+    const fiftyTwoHigh = quoteResult.fiftyTwoWeekHigh || 0;
+    const fiftyTwoLow = quoteResult.fiftyTwoWeekLow || 0;
+    const fiftyTwoRange = fiftyTwoHigh - fiftyTwoLow;
+    if (fiftyTwoRange > 0) {
+      const positionIn52w = (lastPrice - fiftyTwoLow) / fiftyTwoRange; // 0.0 = at low, 1.0 = at high
+      if (positionIn52w < 0.20 && rsi <= 40) score += 7;    // near 52w low + oversold = accumulation zone
+      else if (positionIn52w > 0.90 && rsi >= 60) score -= 7; // near 52w high + overbought = distribution zone
+    }
+
+    // ── NEW: Synergy & Conflict Intelligence ──
+    // Count how many major factors align in same direction
+    const bullishFactors = [
+      rsi <= 40,
+      macdLine > macdSignalLine,
+      lastPrice > (sma50 || 0),
+      vwapDeviation > 0.5,
+      obvTrend === 'RISING',
+      stochK < 30,
+      candlestickScore > 0,
+      macdMomentumScore > 0,
+    ].filter(Boolean).length;
+
+    const bearishFactors = [
+      rsi >= 60,
+      macdLine < macdSignalLine,
+      lastPrice < (sma50 || Infinity),
+      vwapDeviation < -0.5,
+      obvTrend === 'FALLING',
+      stochK > 70,
+      candlestickScore < 0,
+      macdMomentumScore < 0,
+    ].filter(Boolean).length;
+
+    // Synergy bonus: 5+ factors aligned = strong conviction
+    if (bullishFactors >= 5) score += 8;
+    else if (bearishFactors >= 5) score -= 8;
+    // Conflict penalty: strong signals in both directions = unreliable
+    if (bullishFactors >= 3 && bearishFactors >= 3) score -= 5;
 
     // Liquidity Trap Safety Override (Cap score at 45 to protect retail from penny pump traps)
     if (isIlliquidTrap) {
@@ -1096,7 +1313,7 @@ async function analyzeStockForRecommendation(symbol) {
     const profitPerDay = estimatedDays > 0 ? parseFloat((profitPercent / estimatedDays).toFixed(2)) : 0;
     const lossPercent = lastPrice > 0 ? parseFloat(((distanceToSL / lastPrice) * 100).toFixed(2)) : 0;
 
-    // Win Probability Calculation (based on multi-factor alignment)
+    // Win Probability Calculation v2.0 (enhanced with new factors)
     let winProb = 50; // base
     // RSI alignment
     if (rsi <= 30) winProb += 12;
@@ -1120,13 +1337,31 @@ async function analyzeStockForRecommendation(symbol) {
     // Stochastic
     if (stochK < 20) winProb += 5;
     else if (stochK > 80) winProb -= 5;
-    // Divergence synergy
-    if (divergence === 'BULLISH_ACCUMULATION') winProb += 8;
-    else if (divergence === 'BEARISH_BULL_TRAP') winProb -= 8;
-    // RRR bonus (good risk:reward boosts confidence)
+    // Divergence synergy (with strength)
+    if (divergence === 'BULLISH_ACCUMULATION') winProb += divergenceStrength >= 2 ? 12 : 6;
+    else if (divergence === 'BEARISH_BULL_TRAP') winProb -= divergenceStrength >= 2 ? 12 : 6;
+    // RRR bonus
     if (riskRewardRatio >= 3) winProb += 5;
     else if (riskRewardRatio >= 2) winProb += 3;
     else if (riskRewardRatio < 1) winProb -= 5;
+    // ── NEW: VWAP institutional positioning ──
+    if (vwapDeviation > 1) winProb += 5;
+    else if (vwapDeviation < -1) winProb -= 5;
+    // ── NEW: OBV smart money flow ──
+    if (obvDivergence === 'ACCUMULATION') winProb += 8;
+    else if (obvDivergence === 'DISTRIBUTION') winProb -= 8;
+    else if (obvTrend === 'RISING') winProb += 3;
+    else if (obvTrend === 'FALLING') winProb -= 3;
+    // ── NEW: Candlestick pattern ──
+    if (candlestickScore > 0) winProb += 4;
+    else if (candlestickScore < 0) winProb -= 4;
+    // ── NEW: MACD momentum ──
+    if (macdMomentumScore > 3) winProb += 4;
+    else if (macdMomentumScore < -3) winProb -= 4;
+    // ── NEW: Synergy/Conflict ──
+    if (bullishFactors >= 5) winProb += 5;
+    else if (bearishFactors >= 5) winProb -= 5;
+    if (bullishFactors >= 3 && bearishFactors >= 3) winProb -= 3;
     // Illiquidity penalty
     if (isIlliquidTrap) winProb -= 10;
 
@@ -1199,6 +1434,15 @@ async function analyzeStockForRecommendation(symbol) {
       fibonacci,
       profitEstimation,
       divergence,
+      divergenceStrength,
+      vwap: parseFloat(vwap.toFixed(2)),
+      vwapDeviation: parseFloat(vwapDeviation.toFixed(2)),
+      obvTrend,
+      obvDivergence,
+      candlestickPattern,
+      macdMomentum,
+      bullishFactors,
+      bearishFactors,
       isIlliquidTrap,
       dailyTurnover: Math.round(dailyTurnover),
     };
@@ -1275,7 +1519,7 @@ app.get('/api/recommendations/today', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = buyPicks.slice(0, 5).map(s =>
-            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, Support ${s.support}, Resistance ${s.resistance}, Fibonacci 38.2% ${s.fibonacci?.level382}, Fibonacci 61.8% ${s.fibonacci?.level618}, Skor ${s.score}, Win Prob ${s.profitEstimation?.winProbability}%, Est Days ${s.profitEstimation?.estimatedDays}`
+            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, Fib 38.2% ${s.fibonacci?.level382}, Fib 61.8% ${s.fibonacci?.level618}, Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%, Est Days ${s.profitEstimation?.estimatedDays}`
           ).join('\n');
 
           const prompt = `Kamu adalah analis saham profesional Indonesia berpengalaman 20+ tahun. Berdasarkan data teknikal berikut, berikan rekomendasi PRESISI TINGGI untuk HARI INI dalam Bahasa Indonesia.
@@ -1401,7 +1645,7 @@ app.get('/api/recommendations/tomorrow', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = morningPicks.map(s =>
-            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, Support ${s.support}, Resistance ${s.resistance}, Skor ${s.score}`
+            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%`
           ).join('\n');
 
           const prompt = `Kamu adalah analis saham profesional Indonesia. Berdasarkan data teknikal end-of-day berikut, berikan rekomendasi untuk PEMBUKAAN BESOK PAGI dalam Bahasa Indonesia.
@@ -1490,7 +1734,7 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
   }
 });
 
-// Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, Liquidity, and Profit Estimation)
+// Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, Liquidity, VWAP, OBV, Candlesticks and Profit Estimation)
 function generateFallbackReasoning(stock) {
   const parts = [];
 
@@ -1499,14 +1743,35 @@ function generateFallbackReasoning(stock) {
     parts.push('⚠️ PROTEKSI LIKUIDITAS: Turn-over / volume rendah (rawan jebakan volatilitas saham gila/penny stock)');
   }
 
-  // 2. Divergence / Bull Trap Alerts
+  // 2. Divergence / Bull Trap Alerts (with multi-indicator strength)
   if (stock.divergence === 'BEARISH_BULL_TRAP') {
-    parts.push('🚨 Waspada Bull Trap (Bearish Divergence): Harga melaju tinggi tanpa dukung momentum RSI');
+    const strengthTxt = stock.divergenceStrength >= 2 ? ` (${stock.divergenceStrength}x konfirmasi)` : '';
+    parts.push(`🚨 Waspada Bull Trap (Bearish Divergence)${strengthTxt}: Harga melaju tinggi tanpa dukung momentum RSI/OBV`);
   } else if (stock.divergence === 'BULLISH_ACCUMULATION') {
-    parts.push('🟢 Bullish Divergence terdeteksi: Akumulasi di area bottom, potensi reversal kuat');
+    const strengthTxt = stock.divergenceStrength >= 2 ? ` (${stock.divergenceStrength}x konfirmasi)` : '';
+    parts.push(`🟢 Bullish Divergence terdeteksi${strengthTxt}: Akumulasi di area bottom, potensi reversal kuat`);
   }
 
-  // 3. RSI & Trend Momentum
+  // 3. Smart Money OBV & VWAP Institutional Flow
+  if (stock.obvDivergence === 'ACCUMULATION') {
+    parts.push('💎 Smart Money Accumulation: Volume OBV menanjak kencang padahal harga sedang rehat');
+  } else if (stock.obvDivergence === 'DISTRIBUTION') {
+    parts.push('🛑 Smart Money Distribution: Volume OBV melemah tajam padahal harga dipaksa naik (waspada dump)');
+  }
+  if (stock.vwapDeviation !== undefined && Math.abs(stock.vwapDeviation) > 1) {
+    if (stock.vwapDeviation > 0) parts.push(`Harga di atas VWAP (${stock.vwapDeviation}%) menandakan dominasi buyer institusi`);
+    else parts.push(`Harga di bawah VWAP (${stock.vwapDeviation}%) menandakan tekanan jual institusi`);
+  }
+
+  // 4. Candlestick Pattern & MACD Momentum
+  if (stock.candlestickPattern && stock.candlestickPattern !== 'NONE') {
+    parts.push(`Pola candlestick ${stock.candlestickPattern.replace(/_/g, ' ')} terdeteksi`);
+  }
+  if (stock.macdMomentum === 'ZERO_CROSS_BULL' || stock.macdMomentum === 'ACCELERATING_BULL') {
+    parts.push('Momentum MACD Histogram mengakselerasi naik dengan kuat');
+  }
+
+  // 5. RSI & Trend Momentum
   if (stock.rsi < 30) parts.push('RSI sangat oversold — peluang technical rebound');
   else if (stock.rsi < 40) parts.push('RSI di zona akumulasi (mendekati oversold)');
   else if (stock.rsi > 70) parts.push('RSI overbought — rawan aksi take profit');
@@ -1521,7 +1786,7 @@ function generateFallbackReasoning(stock) {
     parts.push(`lonjakan volume ${stock.volRatio}x mengonfirmasi momentum`);
   }
 
-  // 4. Risk/Reward & Profit Estimation
+  // 6. Risk/Reward & Profit Estimation
   const pe = stock.profitEstimation;
   if (pe) {
     parts.push(`RRR ${pe.riskRewardRatio}:1 (SL ${stock.atrStopLoss}, TP ${stock.atrTakeProfit})`);

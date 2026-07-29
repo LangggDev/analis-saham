@@ -413,6 +413,9 @@ const StockRecommendation = {
                 <div class="rec-card-indicators">
                     <span class="rec-indicator" title="RSI">RSI: ${pick.rsi || '—'}</span>
                     <span class="rec-indicator" title="Volume Ratio">Vol: ${pick.volRatio || '—'}x</span>
+                    ${pick.vwap ? `<span class="rec-indicator" title="VWAP">VWAP: ${fmtPrice(pick.vwap)}</span>` : ''}
+                    ${pick.obvDivergence === 'ACCUMULATION' ? `<span class="rec-indicator" style="color:#00e676;" title="OBV Accumulation (Smart Money)">💎 OBV Acc</span>` : pick.obvDivergence === 'DISTRIBUTION' ? `<span class="rec-indicator" style="color:#ff3d00;" title="OBV Distribution">🛑 OBV Dist</span>` : pick.obvTrend && pick.obvTrend !== 'FLAT' ? `<span class="rec-indicator" title="OBV Trend">OBV: ${pick.obvTrend}</span>` : ''}
+                    ${pick.candlestickPattern && pick.candlestickPattern !== 'NONE' ? `<span class="rec-indicator" style="border-color:#ff9100;" title="Candlestick Pattern">🕯️ ${pick.candlestickPattern.replace(/_/g, ' ')}</span>` : ''}
                     <span class="rec-indicator" title="Support">S: ${fmtPrice(pick.support)}</span>
                     <span class="rec-indicator" title="Resistance">R: ${fmtPrice(pick.resistance)}</span>
                 </div>

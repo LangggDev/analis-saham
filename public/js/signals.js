@@ -141,31 +141,134 @@ const SignalEngine = {
         const riskDistance = Math.max(lastPrice - atrStopLoss, lastPrice * 0.015);
         const atrTakeProfit = Math.round(lastPrice + Math.max(riskDistance * 2, 3 * lastATR));
 
-        // --- Bull Trap & Divergence Scanner (Last 20 bars) ---
+        // ═══ VWAP (Volume-Weighted Average Price) ═══
+        const vwapData = Indicators.VWAP(data);
+        let vwap = lastPrice;
+        if (vwapData.length > 0) {
+            vwap = vwapData[vwapData.length - 1].value;
+        }
+        const vwapDeviation = lastPrice > 0 ? ((lastPrice - vwap) / vwap) * 100 : 0;
+
+        // ═══ OBV (On-Balance Volume) ═══
+        const obvValues = [];
+        let obv = 0;
+        for (let i = 0; i < data.length; i++) {
+            if (i === 0) { obv = data[i].volume; }
+            else if (data[i].close > data[i - 1].close) { obv += data[i].volume; }
+            else if (data[i].close < data[i - 1].close) { obv -= data[i].volume; }
+            obvValues.push(obv);
+        }
+        let obvTrend = 'FLAT';
+        if (obvValues.length >= 10) {
+            const obvRecent = obvValues.slice(-5).reduce((a, b) => a + b, 0) / 5;
+            const obvPrev = obvValues.slice(-10, -5).reduce((a, b) => a + b, 0) / 5;
+            const obvChange = obvPrev !== 0 ? ((obvRecent - obvPrev) / Math.abs(obvPrev)) * 100 : 0;
+            if (obvChange > 3) obvTrend = 'RISING';
+            else if (obvChange < -3) obvTrend = 'FALLING';
+        }
+        const prevPriceVal = data.length >= 2 ? data[data.length - 2].close : lastPrice;
+        const priceRising = lastPrice > prevPriceVal;
+        const obvDivergence = (obvTrend === 'FALLING' && priceRising) ? 'DISTRIBUTION'
+                            : (obvTrend === 'RISING' && !priceRising) ? 'ACCUMULATION'
+                            : 'CONFIRMED';
+
+        // ═══ Candlestick Pattern Detection ═══
+        let candlestickPattern = 'NONE';
+        let candlestickScore = 0;
+        if (data.length >= 3) {
+            const curr = data[data.length - 1];
+            const prev1 = data[data.length - 2];
+            const currBody = Math.abs(curr.close - curr.open);
+            const currRange = curr.high - curr.low;
+            const prev1Body = Math.abs(prev1.close - prev1.open);
+            const currBullish = curr.close > curr.open;
+            const prev1Bullish = prev1.close > prev1.open;
+
+            if (currBullish && !prev1Bullish && curr.open <= prev1.close && curr.close >= prev1.open && currBody > prev1Body) {
+                candlestickPattern = 'BULLISH_ENGULFING';
+                candlestickScore = 8;
+            } else if (!currBullish && prev1Bullish && curr.open >= prev1.close && curr.close <= prev1.open && currBody > prev1Body) {
+                candlestickPattern = 'BEARISH_ENGULFING';
+                candlestickScore = -8;
+            } else if (currRange > 0 && currBody / currRange < 0.35 && (curr.close - curr.low) / currRange > 0.6 && lastPrice < prevPriceVal) {
+                candlestickPattern = 'HAMMER';
+                candlestickScore = 6;
+            } else if (currRange > 0 && currBody / currRange < 0.35 && (curr.high - Math.max(curr.open, curr.close)) / currRange > 0.6) {
+                if (lastPrice < prevPriceVal) { candlestickPattern = 'INVERTED_HAMMER'; candlestickScore = 5; }
+                else { candlestickPattern = 'SHOOTING_STAR'; candlestickScore = -6; }
+            } else if (currRange > 0 && currBody / currRange < 0.1) {
+                candlestickPattern = 'DOJI';
+                candlestickScore = -3;
+            }
+
+            if (candlestickPattern !== 'NONE') {
+                const csLabel = candlestickScore > 0 ? 'BUY' : candlestickScore < 0 ? 'SELL' : 'NEUTRAL';
+                signals.push({
+                    name: 'Candlestick Pattern',
+                    signal: csLabel,
+                    value: candlestickPattern.replace(/_/g, ' '),
+                    desc: `${candlestickScore > 0 ? '🟢' : '🔴'} Pola ${candlestickPattern.replace(/_/g, ' ')} terdeteksi`,
+                    _score: candlestickScore > 0 ? 0.6 : -0.6,
+                });
+            }
+        }
+
+        // ═══ MACD Histogram Momentum ═══
+        let macdMomentum = 'NEUTRAL';
+        let macdMomentumScore = 0;
+        if (macdData && macdData.histogram && macdData.histogram.length >= 3) {
+            const hArr = macdData.histogram;
+            const currH = hArr[hArr.length - 1].value;
+            const prevH = hArr[hArr.length - 2].value;
+            const prev2H = hArr[hArr.length - 3].value;
+
+            if (currH > 0 && currH > prevH && prevH > prev2H) { macdMomentum = 'ACCELERATING_BULL'; macdMomentumScore = 5; }
+            else if (currH < 0 && currH < prevH && prevH < prev2H) { macdMomentum = 'ACCELERATING_BEAR'; macdMomentumScore = -5; }
+            else if (currH > 0 && Math.abs(currH) < Math.abs(prevH)) { macdMomentum = 'DECELERATING_BULL'; macdMomentumScore = -3; }
+            else if (currH < 0 && Math.abs(currH) < Math.abs(prevH)) { macdMomentum = 'DECELERATING_BEAR'; macdMomentumScore = 3; }
+            if (prevH < 0 && currH > 0) { macdMomentum = 'ZERO_CROSS_BULL'; macdMomentumScore = 7; }
+            else if (prevH > 0 && currH < 0) { macdMomentum = 'ZERO_CROSS_BEAR'; macdMomentumScore = -7; }
+        }
+
+        // --- Enhanced Multi-Indicator Divergence Scanner ---
         let divergence = 'NONE';
+        let divergenceStrength = 0;
         const rsiValLast = rsiValues && rsiValues.length > 0 ? rsiValues[rsiValues.length - 1].value : 50;
         if (data.length >= 20) {
             const pastSlice = data.slice(-20, -3);
             const maxPastClose = Math.max(...pastSlice.map(d => d.close));
             const minPastClose = Math.min(...pastSlice.map(d => d.close));
-            
-            if (lastPrice >= maxPastClose * 0.995 && rsiValLast < 58) {
-                divergence = 'BEARISH_BULL_TRAP';
+
+            const rsiDivBearish = lastPrice >= maxPastClose * 0.995 && rsiValLast < 58;
+            const rsiDivBullish = lastPrice <= minPastClose * 1.005 && rsiValLast > 35;
+            const obvDivBearish = obvDivergence === 'DISTRIBUTION';
+            const obvDivBullish = obvDivergence === 'ACCUMULATION';
+            const macdDivBearish = macdMomentum === 'DECELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BEAR';
+            const macdDivBullish = macdMomentum === 'ACCELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BULL';
+
+            const bearishCount = [rsiDivBearish, obvDivBearish, macdDivBearish].filter(Boolean).length;
+            const bullishCount = [rsiDivBullish, obvDivBullish, macdDivBullish].filter(Boolean).length;
+
+            if (bearishCount >= 2) { divergence = 'BEARISH_BULL_TRAP'; divergenceStrength = bearishCount; }
+            else if (bullishCount >= 2) { divergence = 'BULLISH_ACCUMULATION'; divergenceStrength = bullishCount; }
+            else if (bearishCount === 1 && rsiDivBearish) { divergence = 'BEARISH_BULL_TRAP'; divergenceStrength = 1; }
+            else if (bullishCount === 1 && rsiDivBullish) { divergence = 'BULLISH_ACCUMULATION'; divergenceStrength = 1; }
+
+            if (divergence === 'BEARISH_BULL_TRAP') {
                 signals.push({
                     name: 'Divergence Scanner',
                     signal: 'SELL',
-                    value: `RSI ${rsiValLast.toFixed(1)}`,
-                    desc: '🚨 Waspada Bull Trap (Bearish Divergence): Harga melaju tinggi tanpa didukung momentum RSI',
-                    _score: -0.8
+                    value: `${divergenceStrength}x konfirmasi`,
+                    desc: `🚨 Bull Trap (${divergenceStrength}x divergence): ${rsiDivBearish ? 'RSI ' : ''}${obvDivBearish ? 'OBV ' : ''}${macdDivBearish ? 'MACD' : ''}`,
+                    _score: divergenceStrength >= 2 ? -0.9 : -0.6,
                 });
-            } else if (lastPrice <= minPastClose * 1.005 && rsiValLast > 35) {
-                divergence = 'BULLISH_ACCUMULATION';
+            } else if (divergence === 'BULLISH_ACCUMULATION') {
                 signals.push({
                     name: 'Divergence Scanner',
                     signal: 'BUY',
-                    value: `RSI ${rsiValLast.toFixed(1)}`,
-                    desc: '🟢 Bullish Divergence terdeteksi: Akumulasi di area bottom, potensi reversal tajam',
-                    _score: 0.8
+                    value: `${divergenceStrength}x konfirmasi`,
+                    desc: `🟢 Bullish Accumulation (${divergenceStrength}x divergence): ${rsiDivBullish ? 'RSI ' : ''}${obvDivBullish ? 'OBV ' : ''}${macdDivBullish ? 'MACD' : ''}`,
+                    _score: divergenceStrength >= 2 ? 0.9 : 0.6,
                 });
             }
         }
@@ -184,7 +287,7 @@ const SignalEngine = {
             });
         }
 
-        // Multi-Factor Precision Technical & Momentum Scoring (0-100 Scale, unified with Recommendation Engine)
+        // Multi-Factor Precision Technical & Momentum Scoring v2.0 (0-100 Scale)
         let precisionScore = 50;
 
         // 1. RSI Factor (+/- 20)
@@ -229,14 +332,13 @@ const SignalEngine = {
             }
         }
 
-        // 5. Volume Breakout Factor (+/- 15, nullified if illiquid trap)
+        // 5. Volume Breakout Factor (+/- 15)
         if (!isIlliquidTrap && volMA && volMA.length > 0) {
             const avgVol = volMA[volMA.length - 1].value;
             const volRatio = avgVol > 0 ? lastVolume / avgVol : 1;
-            const prevPrice = data.length >= 2 ? data[data.length - 2].close : lastPrice;
-            if (volRatio > 1.5 && lastPrice > prevPrice) precisionScore += 15;
-            else if (volRatio > 1.5 && lastPrice < prevPrice) precisionScore -= 15;
-            else if (volRatio > 1.2 && lastPrice > prevPrice) precisionScore += 8;
+            if (volRatio > 1.5 && lastPrice > prevPriceVal) precisionScore += 15;
+            else if (volRatio > 1.5 && lastPrice < prevPriceVal) precisionScore -= 15;
+            else if (volRatio > 1.2 && lastPrice > prevPriceVal) precisionScore += 8;
         }
 
         // 6. Stochastic Factor (+/- 10)
@@ -246,11 +348,44 @@ const SignalEngine = {
             else if (stochK > 80) precisionScore -= 10;
         }
 
-        // 7. Divergence Synergy (+/- 15)
-        if (divergence === 'BULLISH_ACCUMULATION') precisionScore += 15;
-        else if (divergence === 'BEARISH_BULL_TRAP') precisionScore -= 15;
+        // 7. Divergence Synergy (+/- 20)
+        if (divergence === 'BULLISH_ACCUMULATION') precisionScore += divergenceStrength >= 2 ? 20 : 12;
+        else if (divergence === 'BEARISH_BULL_TRAP') precisionScore -= divergenceStrength >= 2 ? 20 : 12;
 
-        // 8. Liquidity Trap Safety Override (Cap score at 45)
+        // 8. VWAP Factor (+/- 8)
+        if (vwapDeviation > 2) precisionScore += 8;
+        else if (vwapDeviation > 0.5) precisionScore += 4;
+        else if (vwapDeviation < -2) precisionScore -= 8;
+        else if (vwapDeviation < -0.5) precisionScore -= 4;
+
+        // 9. OBV Smart Money Factor (+/- 12)
+        if (obvDivergence === 'ACCUMULATION') precisionScore += 12;
+        else if (obvDivergence === 'DISTRIBUTION') precisionScore -= 12;
+        else if (obvTrend === 'RISING' && priceRising) precisionScore += 5;
+        else if (obvTrend === 'FALLING' && !priceRising) precisionScore -= 5;
+
+        // 10. Candlestick Pattern
+        precisionScore += candlestickScore;
+
+        // 11. MACD Histogram Momentum
+        precisionScore += macdMomentumScore;
+
+        // 12. Synergy & Conflict Intelligence
+        const stochKVal = stochData && stochData.k.length > 0 ? stochData.k[stochData.k.length - 1].value : 50;
+        const bullishFactors = [
+            rsiValLast <= 40, macdData?.macdLine?.length > 0 && macdData.macdLine[macdData.macdLine.length-1].value > (macdData.signalLine[macdData.signalLine.length-1]?.value || 0),
+            lastPrice > (s50 || 0), vwapDeviation > 0.5, obvTrend === 'RISING', stochKVal < 30, candlestickScore > 0, macdMomentumScore > 0,
+        ].filter(Boolean).length;
+        const bearishFactors = [
+            rsiValLast >= 60, macdData?.macdLine?.length > 0 && macdData.macdLine[macdData.macdLine.length-1].value < (macdData.signalLine[macdData.signalLine.length-1]?.value || 0),
+            lastPrice < (s50 || Infinity), vwapDeviation < -0.5, obvTrend === 'FALLING', stochKVal > 70, candlestickScore < 0, macdMomentumScore < 0,
+        ].filter(Boolean).length;
+
+        if (bullishFactors >= 5) precisionScore += 8;
+        else if (bearishFactors >= 5) precisionScore -= 8;
+        if (bullishFactors >= 3 && bearishFactors >= 3) precisionScore -= 5;
+
+        // 13. Liquidity Trap Safety Override
         if (isIlliquidTrap) {
             precisionScore = Math.min(precisionScore - 20, 45);
         }
@@ -280,8 +415,9 @@ const SignalEngine = {
         // ── Profit Estimation Engine ──
         const profitEstimation = this._calculateProfitEstimation(
             data, lastPrice, lastATR, atrStopLoss, atrTakeProfit,
-            score, rsiValLast, divergence, isIlliquidTrap,
-            volMA, lastVolume
+            score, rsiValLast, divergence, divergenceStrength, isIlliquidTrap,
+            volMA, lastVolume, vwapDeviation, obvTrend, obvDivergence,
+            candlestickScore, macdMomentumScore, bullishFactors, bearishFactors
         );
 
         return {
@@ -295,6 +431,14 @@ const SignalEngine = {
             fibonacci,
             profitEstimation,
             divergence,
+            divergenceStrength,
+            vwapDeviation: parseFloat(vwapDeviation.toFixed(2)),
+            obvTrend,
+            obvDivergence,
+            candlestickPattern,
+            macdMomentum,
+            bullishFactors,
+            bearishFactors,
             isIlliquidTrap,
             dailyTurnover: Math.round(dailyTurnover)
         };
@@ -870,7 +1014,12 @@ const SignalEngine = {
     /**
      * Calculate time-based profit estimation with win probability
      */
-    _calculateProfitEstimation(data, lastPrice, atr, stopLoss, takeProfit, score, rsi, divergence, isIlliquidTrap, volMA, lastVolume) {
+    _calculateProfitEstimation(
+        data, lastPrice, atr, stopLoss, takeProfit,
+        score, rsi, divergence, divergenceStrength = 0, isIlliquidTrap = false,
+        volMA = [], lastVolume = 0, vwapDeviation = 0, obvTrend = 'FLAT', obvDivergence = 'CONFIRMED',
+        candlestickScore = 0, macdMomentumScore = 0, bullishFactors = 0, bearishFactors = 0
+    ) {
         const atrPercent = lastPrice > 0 ? (atr / lastPrice) * 100 : 1;
 
         // MACD direction from data
@@ -918,7 +1067,7 @@ const SignalEngine = {
         const lossPct = lastPrice > 0 ? parseFloat(((distSL / lastPrice) * 100).toFixed(2)) : 0;
         const profitPerDay = estDays > 0 ? parseFloat((profitPct / estDays).toFixed(2)) : 0;
 
-        // Win probability
+        // Win probability v2.0 (Enhanced Multi-Factor)
         let winProb = 50;
         if (rsi <= 30) winProb += 12;
         else if (rsi <= 40) winProb += 6;
@@ -933,12 +1082,37 @@ const SignalEngine = {
         if (volRatio > 1.5 && priceUp) winProb += 7;
         else if (volRatio > 1.5 && !priceUp) winProb -= 7;
 
-        if (divergence === 'BULLISH_ACCUMULATION') winProb += 8;
-        else if (divergence === 'BEARISH_BULL_TRAP') winProb -= 8;
+        // Divergence synergy (with strength)
+        if (divergence === 'BULLISH_ACCUMULATION') winProb += divergenceStrength >= 2 ? 12 : 6;
+        else if (divergence === 'BEARISH_BULL_TRAP') winProb -= divergenceStrength >= 2 ? 12 : 6;
 
+        // RRR bonus
         if (rrr >= 3) winProb += 5;
         else if (rrr >= 2) winProb += 3;
         else if (rrr < 1) winProb -= 5;
+
+        // ── NEW: VWAP institutional positioning ──
+        if (vwapDeviation > 1) winProb += 5;
+        else if (vwapDeviation < -1) winProb -= 5;
+
+        // ── NEW: OBV smart money flow ──
+        if (obvDivergence === 'ACCUMULATION') winProb += 8;
+        else if (obvDivergence === 'DISTRIBUTION') winProb -= 8;
+        else if (obvTrend === 'RISING') winProb += 3;
+        else if (obvTrend === 'FALLING') winProb -= 3;
+
+        // ── NEW: Candlestick pattern ──
+        if (candlestickScore > 0) winProb += 4;
+        else if (candlestickScore < 0) winProb -= 4;
+
+        // ── NEW: MACD momentum ──
+        if (macdMomentumScore > 3) winProb += 4;
+        else if (macdMomentumScore < -3) winProb -= 4;
+
+        // ── NEW: Synergy/Conflict ──
+        if (bullishFactors >= 5) winProb += 5;
+        else if (bearishFactors >= 5) winProb -= 5;
+        if (bullishFactors >= 3 && bearishFactors >= 3) winProb -= 3;
 
         if (isIlliquidTrap) winProb -= 10;
 
