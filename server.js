@@ -11,7 +11,7 @@ import jwt from 'jsonwebtoken';
 import { pool, initDB, ensureDB } from './db.js';
 
 dotenv.config();
-const JWT_SECRET = process.env.JWT_SECRET || 'stockpulse_secret_key_super_secure_2026_jwt_token';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'stockpulse_secret_key_super_secure_2026_jwt_token';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

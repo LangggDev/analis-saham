@@ -5,8 +5,14 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Initialize PostgreSQL Connection Pool
-const connectionString = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/stock_analyzer';
+// Initialize PostgreSQL Connection Pool (Supports Vercel Postgres, Supabase, Neon, etc.)
+const connectionString = 
+  process.env.DATABASE_URL || 
+  process.env.POSTGRES_URL || 
+  process.env.POSTGRES_PRISMA_URL || 
+  process.env.POSTGRES_URL_NON_POOLING || 
+  process.env.SUPABASE_DATABASE_URL || 
+  'postgres://postgres:password@localhost:5432/stock_analyzer';
 
 export const pool = new Pool({
   connectionString,
