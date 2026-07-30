@@ -2016,7 +2016,7 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     // Cek duplikasi akun
     const existing = await pool.query(
-      'SELECT id FROM users WHERE username = $1 OR email = $2 LIMIT 1',
+      'SELECT id FROM app_users WHERE username = $1 OR email = $2 LIMIT 1',
       [username.trim().toLowerCase(), email.trim().toLowerCase()]
     );
     if (existing.rows.length > 0) {
@@ -2027,7 +2027,7 @@ app.post('/api/auth/register', async (req, res) => {
     const hash = await bcrypt.hash(password, salt);
 
     const newRes = await pool.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
+      'INSERT INTO app_users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
       [username.trim().toLowerCase(), email.trim().toLowerCase(), hash]
     );
     const user = newRes.rows[0];
@@ -2048,7 +2048,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     const userRes = await pool.query(
-      'SELECT * FROM users WHERE username = $1 OR email = $1 LIMIT 1',
+      'SELECT * FROM app_users WHERE username = $1 OR email = $1 LIMIT 1',
       [login.trim().toLowerCase()]
     );
     if (userRes.rows.length === 0) {
@@ -2070,7 +2070,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const uRes = await pool.query('SELECT id, username, email, created_at FROM users WHERE id = $1', [req.user.id]);
+    const uRes = await pool.query('SELECT id, username, email, created_at FROM app_users WHERE id = $1', [req.user.id]);
     if (uRes.rows.length === 0) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
     
     // Tarik statistik ringkasan evaluasi trading pengguna
@@ -2080,7 +2080,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         COALESCE(SUM(CASE WHEN type = 'SELL' THEN pnl ELSE 0 END), 0) as total_pnl,
         COUNT(CASE WHEN type = 'SELL' AND pnl > 0 THEN 1 END) as win_count,
         COUNT(CASE WHEN type = 'SELL' AND pnl <= 0 THEN 1 END) as loss_count
-      FROM transactions 
+      FROM app_transactions 
       WHERE user_id = $1
     `, [req.user.id]);
 
@@ -2098,7 +2098,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 app.get('/api/transactions', authenticateToken, async (req, res) => {
   try {
     const txRes = await pool.query(
-      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_date DESC, id DESC LIMIT 200',
+      'SELECT * FROM app_transactions WHERE user_id = $1 ORDER BY transaction_date DESC, id DESC LIMIT 200',
       [req.user.id]
     );
 
@@ -2175,7 +2175,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     // Jika transaksi adalah JUAL (SELL), hitung Realized P&L otomatis berdasarkan harga rata-rata beli
     if (txType === 'SELL') {
       const buyRes = await pool.query(
-        "SELECT SUM(total_value) as sum_val, SUM(quantity) as sum_qty FROM transactions WHERE user_id = $1 AND symbol = $2 AND type = 'BUY'",
+        "SELECT SUM(total_value) as sum_val, SUM(quantity) as sum_qty FROM app_transactions WHERE user_id = $1 AND symbol = $2 AND type = 'BUY'",
         [req.user.id, cleanSymbol]
       );
       const sumVal = Number(buyRes.rows[0]?.sum_val || 0);
@@ -2195,7 +2195,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     const dateVal = transaction_date ? new Date(transaction_date) : new Date();
 
     const insertRes = await pool.query(
-      `INSERT INTO transactions (user_id, symbol, type, price, quantity, total_value, transaction_date, strategy_tag, notes, pnl, pnl_percent) 
+      `INSERT INTO app_transactions (user_id, symbol, type, price, quantity, total_value, transaction_date, strategy_tag, notes, pnl, pnl_percent) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [req.user.id, cleanSymbol, txType, numPrice, numQty, totalVal, dateVal, strategy_tag || 'Standard Trade', notes || '', pnl, pnlPercent]
     );
@@ -2210,7 +2210,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
   try {
     const delRes = await pool.query(
-      'DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id',
+      'DELETE FROM app_transactions WHERE id = $1 AND user_id = $2 RETURNING id',
       [req.params.id, req.user.id]
     );
     if (delRes.rows.length === 0) {
@@ -2226,7 +2226,7 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
 app.get('/api/transactions/export', authenticateToken, async (req, res) => {
   try {
     const txRes = await pool.query(
-      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY transaction_date DESC, id DESC',
+      'SELECT * FROM app_transactions WHERE user_id = $1 ORDER BY transaction_date DESC, id DESC',
       [req.user.id]
     );
 

@@ -50,9 +50,9 @@ export async function initDB() {
   try {
     console.log('📦 [PostgreSQL] Terhubung ke database. Menyiapkan skema tabel (Auto-Migration)...');
     
-    // 1. Tabel users
+    // 1. Tabel app_users (Penggunaan nama 'app_users' mencegah bentrokan dengan tabel 'users' sistem Supabase)
     await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE IF NOT EXISTS app_users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -61,11 +61,11 @@ export async function initDB() {
       );
     `);
 
-    // 2. Tabel transactions (Jurnal & Evaluasi)
+    // 2. Tabel app_transactions (Jurnal & Evaluasi Trading)
     await client.query(`
-      CREATE TABLE IF NOT EXISTS transactions (
+      CREATE TABLE IF NOT EXISTS app_transactions (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
         symbol VARCHAR(20) NOT NULL,
         type VARCHAR(10) NOT NULL,
         price NUMERIC(15, 2) NOT NULL,
@@ -81,11 +81,11 @@ export async function initDB() {
 
     // Indexing untuk kecepatan pencarian transaksi berdasarkan user dan simbol saham
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
-      CREATE INDEX IF NOT EXISTS idx_transactions_symbol ON transactions(symbol);
+      CREATE INDEX IF NOT EXISTS idx_app_transactions_user_id ON app_transactions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_app_transactions_symbol ON app_transactions(symbol);
     `);
 
-    console.log('✅ [PostgreSQL] Skema tabel `users` dan `transactions` siap!');
+    console.log('✅ [PostgreSQL] Skema tabel `app_users` dan `app_transactions` siap!');
     return true;
   } catch (err) {
     console.error('❌ [PostgreSQL Migration Error]:', err.message);
