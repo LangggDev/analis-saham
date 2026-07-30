@@ -14,11 +14,18 @@ const connectionString =
   process.env.SUPABASE_DATABASE_URL || 
   'postgres://postgres:password@localhost:5432/stock_analyzer';
 
+const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+
+// Formatter: Hapus atau ganti parameter sslmode yang memaksa pemindaian sertifikat ketat di Vercel/Supabase
+let cleanedConnectionString = connectionString;
+if (!isLocal) {
+  cleanedConnectionString = cleanedConnectionString
+    .replace(/sslmode=(require|verify-full|verify-ca)/gi, 'sslmode=no-verify');
+}
+
 export const pool = new Pool({
-  connectionString,
-  ssl: connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
-    ? false
-    : { rejectUnauthorized: false }
+  connectionString: cleanedConnectionString,
+  ssl: isLocal ? false : { rejectUnauthorized: false }
 });
 
 pool.on('error', (err) => {
