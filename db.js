@@ -95,7 +95,23 @@ export async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_app_transactions_symbol ON app_transactions(symbol);
     `);
 
-    console.log('✅ [PostgreSQL] Skema tabel `app_users` dan `app_transactions` siap!');
+    // 3. Tabel app_orders (Riwayat Transaksi Payment Gateway Midtrans)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_orders (
+        order_id VARCHAR(100) PRIMARY KEY,
+        user_id INTEGER REFERENCES app_users(id) ON DELETE CASCADE,
+        gross_amount NUMERIC(15, 2) NOT NULL,
+        payment_method VARCHAR(50) DEFAULT 'QRIS/VA',
+        status VARCHAR(50) DEFAULT 'PENDING',
+        snap_token VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_orders_user_id ON app_orders(user_id);
+      CREATE INDEX IF NOT EXISTS idx_app_orders_status ON app_orders(status);
+    `);
+
+    console.log('✅ [PostgreSQL] Skema tabel `app_users`, `app_transactions`, dan `app_orders` siap!');
     return true;
   } catch (err) {
     console.error('❌ [PostgreSQL Migration Error]:', err.message);

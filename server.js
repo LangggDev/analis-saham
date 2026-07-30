@@ -9,9 +9,33 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool, initDB, ensureDB } from './db.js';
+import midtransClient from 'midtrans-client';
 
 dotenv.config();
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'stockpulse_secret_key_super_secure_2026_jwt_token';
+
+// ─── Midtrans Gateway Client Configuration ──────────────────────────────────
+const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || 'SB-Mid-server-YOUR_SERVER_KEY_DEFAULT';
+const MIDTRANS_CLIENT_KEY = process.env.MIDTRANS_CLIENT_KEY || 'SB-Mid-client-YOUR_CLIENT_KEY_DEFAULT';
+const IS_PRODUCTION = process.env.MIDTRANS_IS_PRODUCTION === 'true';
+
+let snapClient = null;
+let coreApiClient = null;
+try {
+  snapClient = new midtransClient.Snap({
+    isProduction: IS_PRODUCTION,
+    serverKey: MIDTRANS_SERVER_KEY,
+    clientKey: MIDTRANS_CLIENT_KEY
+  });
+  coreApiClient = new midtransClient.CoreApi({
+    isProduction: IS_PRODUCTION,
+    serverKey: MIDTRANS_SERVER_KEY,
+    clientKey: MIDTRANS_CLIENT_KEY
+  });
+  console.log('💳 [Midtrans] Gateway client berhasil diinisialisasi (' + (IS_PRODUCTION ? 'Production' : 'Sandbox') + ').');
+} catch (err) {
+  console.warn('⚠️ [Midtrans Warning]: Gagal menginisialisasi client Midtrans:', err.message);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2106,6 +2130,7 @@ app.post('/api/auth/register', rateLimitAuth, async (req, res) => {
 });
 
 app.post('/api/auth/login', rateLimitAuth, async (req, res) => {
+  await ensureDB();
   const { login, password, remember_me } = req.body;
   if (!login || !password) {
     return res.status(400).json({ error: 'Username/Email dan password wajib diisi.' });
@@ -2150,6 +2175,7 @@ app.post('/api/auth/login', rateLimitAuth, async (req, res) => {
 });
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  await ensureDB();
   try {
     const uRes = await pool.query('SELECT id, username, email, tier, payment_status, tier_expires, created_at FROM app_users WHERE id = $1', [req.user.id]);
     if (uRes.rows.length === 0) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
@@ -2174,36 +2200,171 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-// ─── API: Fitur Pembayaran Berlangganan (/api/payment/*) ──────────────────────
+// ─── API: Fitur Pembayaran Berlangganan (Midtrans Snap & Webhook /api/payment/*) ────────
 app.post('/api/payment/checkout', authenticateToken, async (req, res) => {
+  await ensureDB();
   try {
     const { method } = req.body; // 'QRIS', 'VA_BCA', 'VA_MANDIRI'
-    const vaNumber = method === 'VA_BCA' ? '88012' + Math.floor(10000000 + Math.random() * 90000000)
-                   : method === 'VA_MANDIRI' ? '89012' + Math.floor(10000000 + Math.random() * 90000000)
-                   : null;
+    const orderId = `PRO-${req.user.id}-${Date.now()}`;
+    const amount = 99000;
+
+    // Simpan data order awal ke tabel app_orders
+    await pool.query(
+      'INSERT INTO app_orders (order_id, user_id, gross_amount, payment_method, status) VALUES ($1, $2, $3, $4, $5)',
+      [orderId, req.user.id, amount, method || 'QRIS', 'PENDING']
+    );
 
     await pool.query(
       'UPDATE app_users SET tier = $1, payment_status = $2, payment_method = $3 WHERE id = $4',
       ['PRO', 'UNPAID', method || 'QRIS', req.user.id]
     );
 
+    // Coba integrasi Midtrans Snap asli jika API Key sudah dikonfigurasi
+    if (snapClient && MIDTRANS_SERVER_KEY && !MIDTRANS_SERVER_KEY.includes('YOUR_SERVER_KEY_DEFAULT')) {
+      try {
+        const parameter = {
+          transaction_details: {
+            order_id: orderId,
+            gross_amount: amount
+          },
+          credit_card: { secure: true },
+          customer_details: {
+            first_name: req.user.username || 'Trader',
+            email: req.user.email || 'trader@stockpulse.id'
+          },
+          item_details: [{
+            id: 'PRO-TRADER-30D',
+            price: amount,
+            quantity: 1,
+            name: 'StockPulse PRO Member (30 Hari)'
+          }]
+        };
+
+        const snapTokenResponse = await snapClient.createTransaction(parameter);
+        await pool.query('UPDATE app_orders SET snap_token = $1 WHERE order_id = $2', [snapTokenResponse.token, orderId]);
+
+        return res.json({
+          success: true,
+          orderId,
+          amount,
+          currency: 'IDR',
+          useSnap: true,
+          snapToken: snapTokenResponse.token,
+          redirectUrl: snapTokenResponse.redirect_url,
+          clientKey: MIDTRANS_CLIENT_KEY
+        });
+      } catch (snapErr) {
+        console.warn('⚠️ [Midtrans Snap Error]: Gagal menghubungi server Midtrans, beralih ke mode simulasi:', snapErr.message);
+      }
+    }
+
+    // Fallback mode simulasi (jika API Key belum dipesan/dikonfigurasi di .env)
+    const vaNumber = method === 'VA_BCA' ? '88012' + Math.floor(10000000 + Math.random() * 90000000)
+                   : method === 'VA_MANDIRI' ? '89012' + Math.floor(10000000 + Math.random() * 90000000)
+                   : null;
+
     res.json({
       success: true,
-      amount: 99000,
+      orderId,
+      amount,
       currency: 'IDR',
+      useSnap: false,
       method: method || 'QRIS',
       vaNumber,
       qrisUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=00020101021126580014ID.CO.MIDTRANS.WWW01189360091100000000005204581253033605405990005802ID5916STOCKPULSE_PRO6007JAKARTA63041A2B',
       expiresInMinutes: 30
     });
   } catch (err) {
+    console.error('❌ [Checkout Error]:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint Resmi untuk Server Bank & Webhook Notifikasi Midtrans Real-Time
+app.post('/api/payment/webhook', async (req, res) => {
+  await ensureDB();
+  try {
+    const notification = req.body;
+    console.log('📬 [Midtrans Webhook] Menerima notifikasi transaksi:', notification.order_id);
+
+    let orderId = notification.order_id;
+    let transactionStatus = notification.transaction_status;
+    let fraudStatus = notification.fraud_status;
+
+    // Verifikasi keaslian payload menggunakan SDK
+    if (coreApiClient && MIDTRANS_SERVER_KEY && !MIDTRANS_SERVER_KEY.includes('YOUR_SERVER_KEY_DEFAULT')) {
+      try {
+        const statusResponse = await coreApiClient.transaction.notification(notification);
+        orderId = statusResponse.order_id;
+        transactionStatus = statusResponse.transaction_status;
+        fraudStatus = statusResponse.fraud_status;
+      } catch (sdkErr) {
+        console.warn('⚠️ [Webhook SDK Verify Warning]:', sdkErr.message);
+      }
+    }
+
+    let orderStatus = 'PENDING';
+    if (transactionStatus == 'capture') {
+      orderStatus = fraudStatus == 'challenge' ? 'CHALLENGE' : 'PAID';
+    } else if (transactionStatus == 'settled' || transactionStatus == 'settlement') {
+      orderStatus = 'PAID';
+    } else if (transactionStatus == 'cancel' || transactionStatus == 'deny' || transactionStatus == 'expire') {
+      orderStatus = 'FAILED';
+    } else if (transactionStatus == 'pending') {
+      orderStatus = 'PENDING';
+    }
+
+    // Update status pemesanan di database
+    const ordRes = await pool.query('UPDATE app_orders SET status = $1, updated_at = NOW() WHERE order_id = $2 RETURNING user_id', [orderStatus, orderId]);
+
+    // Jika pembayaran PAID / terealisasi, aktivasi status PRO Member otomatis!
+    if (orderStatus === 'PAID' && ordRes.rows.length > 0) {
+      const userId = ordRes.rows[0].user_id;
+      const expiresDate = new Date();
+      expiresDate.setDate(expiresDate.getDate() + 30); // 30 hari akses PRO
+
+      await pool.query(
+        'UPDATE app_users SET tier = $1, payment_status = $2, tier_expires = $3 WHERE id = $4',
+        ['PRO', 'PAID', expiresDate.toISOString(), userId]
+      );
+      console.log(`✅ [Midtrans Automation] Pembayaran Sukses! Akun User #${userId} telah otomatis diaktifkan menjadi PRO Member.`);
+    }
+
+    res.status(200).json({ status: 'OK', processed_status: orderStatus });
+  } catch (err) {
+    console.error('❌ [Midtrans Webhook Error]:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint untuk frontend melakukan polling konfirmasi status pesanan
+app.get('/api/payment/status/:orderId', authenticateToken, async (req, res) => {
+  await ensureDB();
+  try {
+    const { orderId } = req.params;
+    const ordRes = await pool.query('SELECT status, gross_amount, payment_method FROM app_orders WHERE order_id = $1 AND user_id = $2', [orderId, req.user.id]);
+    if (ordRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Data transaksi tidak ditemukan.' });
+    }
+    const orderData = ordRes.rows[0];
+
+    // Jika sudah PAID di DB, laporkan sukses
+    res.json({ success: true, orderId, status: orderData.status });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/payment/confirm', authenticateToken, async (req, res) => {
+  await ensureDB();
   try {
-    // Simulasi verifikasi instan settlement gateway
+    const { orderId } = req.body;
+    // Jika orderId diset, mark PAID di app_orders juga
+    if (orderId) {
+      await pool.query('UPDATE app_orders SET status = $1, updated_at = NOW() WHERE order_id = $2 AND user_id = $3', ['PAID', orderId, req.user.id]);
+    }
+
+    // Verifikasi instan (Untuk simulasi atau konfirmasi manual dari modal simulasi)
     const expiresDate = new Date();
     expiresDate.setDate(expiresDate.getDate() + 30); // 30 hari akses PRO
 

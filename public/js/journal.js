@@ -13,9 +13,18 @@ const JournalManager = {
 
     init() {
         this.token = localStorage.getItem('stockpulse_jwt');
+        try {
+            const cachedUser = localStorage.getItem('stockpulse_user');
+            if (cachedUser) this.user = JSON.parse(cachedUser);
+        } catch (e) {
+            this.user = null;
+        }
         this.loadPreOrders();
         this.bindHeaderEvents();
         if (this.token) {
+            if (this.user) {
+                this.updateAuthUI();
+            }
             this.verifySession();
         } else {
             this.updateAuthUI();
@@ -53,16 +62,20 @@ const JournalManager = {
             const res = await fetch('/api/auth/me', {
                 headers: { 'Authorization': `Bearer ${this.token}` }
             });
-            if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
                 this.logout(false);
+                return;
+            }
+            if (!res.ok) {
+                console.warn('[Session Sync]: Server merespons dengan error, tetap menggunakan cache sesi lokal.');
                 return;
             }
             const data = await res.json();
             this.user = data.user;
+            localStorage.setItem('stockpulse_user', JSON.stringify(this.user));
             this.updateAuthUI();
         } catch (e) {
-            console.warn('[Session Error]:', e.message);
-            this.logout(false);
+            console.warn('[Session Offline]: Gagal terhubung ke server, tetap mempertahankan sesi lokal:', e.message);
         }
     },
 
@@ -221,6 +234,7 @@ const JournalManager = {
             this.token = data.token;
             this.user = data.user;
             localStorage.setItem('stockpulse_jwt', this.token);
+            localStorage.setItem('stockpulse_user', JSON.stringify(this.user));
             this.updateAuthUI();
             this.closeModal('authModal');
             this.showToast('Selamat datang kembali, ' + this.user.username.toUpperCase());
@@ -263,6 +277,7 @@ const JournalManager = {
             this.token = data.token;
             this.user = data.user;
             localStorage.setItem('stockpulse_jwt', this.token);
+            localStorage.setItem('stockpulse_user', JSON.stringify(this.user));
             this.updateAuthUI();
             this.closeModal('authModal');
 
@@ -293,6 +308,27 @@ const JournalManager = {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Gagal menyiapkan tagihan pembayaran.');
 
+            // Jika Midtrans Snap aktif, buka jendela popup pembayaran asli
+            if (data.useSnap && window.snap) {
+                window.snap.pay(data.snapToken, {
+                    onSuccess: async (result) => {
+                        this.showToast('Pembayaran Midtrans berhasil! Mengaktifkan lisensi PRO...');
+                        await this.confirmPayment(data.orderId);
+                    },
+                    onPending: (result) => {
+                        this.showToast('Menunggu konfirmasi penyelesaian pembayaran Anda di bank.');
+                    },
+                    onError: (result) => {
+                        alert('Terjadi kesalahan pada transaksi pembayaran Midtrans Anda.');
+                    },
+                    onClose: () => {
+                        this.showToast('Jendela pembayaran tertutup sebelum transaksi diselesaikan.');
+                    }
+                });
+                return;
+            }
+
+            // Jika belum diatur API key asli di .env, tampilkan modal simulasi
             this.showPaymentModal(data);
         } catch (e) {
             alert('Error Pembayaran: ' + e.message);
@@ -340,18 +376,22 @@ const JournalManager = {
                         </div>
                     `}
 
-                    <button class="btn-submit-neon btn-confirm-pay" onclick="JournalManager.confirmPayment()">Konfirmasi Pembayaran Selesai</button>
+                    <button class="btn-submit-neon btn-confirm-pay" onclick="JournalManager.confirmPayment('${payData.orderId || ''}')">Konfirmasi Pembayaran Selesai</button>
                 </div>
             </div>
         `;
         modal.style.display = 'flex';
     },
 
-    async confirmPayment() {
+    async confirmPayment(orderId = null) {
         try {
             const res = await fetch('/api/payment/confirm', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${this.token}` }
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}` 
+                },
+                body: JSON.stringify({ orderId: typeof orderId === 'string' ? orderId : null })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Konfirmasi pembayaran gagal.');
@@ -359,6 +399,7 @@ const JournalManager = {
             this.user.tier = 'PRO';
             this.user.payment_status = 'PAID';
             this.user.tier_expires = data.expiresAt;
+            localStorage.setItem('stockpulse_user', JSON.stringify(this.user));
             this.updateAuthUI();
             this.closeModal('paymentModal');
             this.showToast('Pembayaran berhasil! Akun Anda aktif sebagai PRO Member.');
@@ -417,6 +458,7 @@ const JournalManager = {
         this.token = null;
         this.user = null;
         localStorage.removeItem('stockpulse_jwt');
+        localStorage.removeItem('stockpulse_user');
         this.updateAuthUI();
         this.closeModal('profileModal');
         if (showMessage) {

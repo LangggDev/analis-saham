@@ -1,17 +1,3 @@
-/**
- * Stock Analyzer — Main Application
- * v3.0 — with Lightweight Charts (real-time) + Fundamental Analysis + Pre-Order System
- * Depends on:
- *   - LightweightCharts (loaded via CDN)
- *   - Indicators  (indicators.js)
- *   - SignalEngine (signals.js)
- *   - FundamentalAnalysis (fundamental.js)
- *   - PreOrderManager (preorder.js)
- */
-
-/* ======================================================================
-   1. DataService – thin wrapper around backend REST API
-   ====================================================================== */
 
 class DataService {
     static async getQuote(symbol) {
@@ -428,7 +414,7 @@ class ChartManager {
         const isUS = timezone === 'America/New_York';
         const openHour = isUS ? 9 : 9;
         const openMin = isUS ? 30 : 0;
-        
+
         // Format to YYYY-MM-DD
         const fmt = new Intl.DateTimeFormat('en-CA', {
             timeZone: timezone,
@@ -437,11 +423,11 @@ class ChartManager {
             day: '2-digit'
         });
         const dateStr = fmt.format(date); // "YYYY-MM-DD"
-        
+
         const targetDate = new Date(`${dateStr}T${String(openHour).padStart(2, '0')}:${String(openMin).padStart(2, '0')}:00`);
         const browserDate = new Date();
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        
+
         const getTzOffset = (tz, d) => {
             try {
                 const s = d.toLocaleString('en-US', { timeZone: tz });
@@ -450,7 +436,7 @@ class ChartManager {
                 return 0;
             }
         };
-        
+
         const diff = getTzOffset(timezone, targetDate) - getTzOffset(browserTz, targetDate);
         return Math.floor((targetDate.getTime() - diff) / 1000);
     }
@@ -461,7 +447,7 @@ class ChartManager {
         const nowDate = new Date(nowTime * 1000);
 
         const formatOptions = { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' };
-        
+
         if (interval === '1d') {
             const fmt = new Intl.DateTimeFormat('en-US', formatOptions);
             return fmt.format(lastDate) === fmt.format(nowDate);
@@ -823,7 +809,7 @@ class NotificationManager {
                         Skor: ${n.score}
                     </div>
                     <div class="notif-item-details">
-                        ${n.signals.slice(0,3).map(s => `${s.name}: ${s.signal}`).join(' · ')}
+                        ${n.signals.slice(0, 3).map(s => `${s.name}: ${s.signal}`).join(' · ')}
                     </div>
                 </div>
             `;
@@ -1312,18 +1298,18 @@ class App {
     async _updateMarketStatus(exchange) {
         try {
             const status = await DataService.getMarketStatus(exchange);
-            
+
             const badge = document.getElementById('marketStatusBadge');
             const dot = document.getElementById('marketStatusDot');
             const text = document.getElementById('marketStatusText');
-            
+
             if (badge) {
                 badge.className = 'market-status-badge ' + status.state.toLowerCase().replace('_', '-');
                 badge.title = `${status.name} — ${status.tradingHours}`;
             }
             if (text) {
-                text.textContent = status.state === 'OPEN' ? '🟢 BUKA' : 
-                                   status.state === 'PRE_MARKET' ? '🟡 PRE' : '🔴 TUTUP';
+                text.textContent = status.state === 'OPEN' ? '🟢 BUKA' :
+                    status.state === 'PRE_MARKET' ? '🟡 PRE' : '🔴 TUTUP';
             }
 
             // Update night banner
@@ -1478,7 +1464,7 @@ class App {
     updateSignalPanel(symbol, data, price) {
         if (!data || data.length < 30) return;
         const result = SignalEngine.analyze(data);
-        
+
         // Sync with official recommendation pick score if symbol is currently recommended
         const recPick = typeof StockRecommendation !== 'undefined' ? StockRecommendation.getRecommendationForSymbol(symbol) : null;
         this._lastTechnicalScore = recPick && typeof recPick.score === 'number' ? recPick.score : result.score;
@@ -1850,7 +1836,7 @@ class App {
         // Type toggle (BUY/SELL)
         const buyBtn = document.getElementById('poBuyBtn');
         const sellBtn = document.getElementById('poSellBtn');
-        
+
         if (buyBtn && sellBtn) {
             buyBtn.addEventListener('click', () => {
                 this._currentOrderType = 'BUY';
@@ -1867,7 +1853,7 @@ class App {
         // Calculate total on input change
         const priceInput = document.getElementById('poPrice');
         const qtyInput = document.getElementById('poQty');
-        
+
         const updateTotal = () => {
             const price = parseFloat(priceInput?.value) || 0;
             const qty = parseInt(qtyInput?.value) || 0;
@@ -1877,12 +1863,12 @@ class App {
             const total = price * qty * lotSize;
             const totalEl = document.getElementById('preorderTotalValue');
             if (totalEl) {
-                totalEl.textContent = isIDR 
+                totalEl.textContent = isIDR
                     ? `Rp ${new Intl.NumberFormat('id-ID').format(total)}`
                     : `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(total)}`;
             }
         };
-        
+
         if (priceInput) priceInput.addEventListener('input', updateTotal);
         if (qtyInput) qtyInput.addEventListener('input', updateTotal);
 
@@ -1912,7 +1898,7 @@ class App {
                     if (notesEl) notesEl.value = '';
 
                     this._updatePreOrderBadge();
-                    
+
                     // Show success toast
                     this.notifications._showToast({
                         symbol: order.symbol,
@@ -1970,11 +1956,11 @@ class App {
             const idr = isIDR(order.symbol);
             const lotSize = idr ? 100 : 1;
             const total = order.targetPrice * order.quantity * lotSize;
-            const totalStr = idr 
+            const totalStr = idr
                 ? `Rp ${new Intl.NumberFormat('id-ID').format(total)}`
                 : `$${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(total)}`;
 
-            const priceStr = idr 
+            const priceStr = idr
                 ? new Intl.NumberFormat('id-ID').format(order.targetPrice)
                 : new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(order.targetPrice);
 
