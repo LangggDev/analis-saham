@@ -2002,35 +2002,100 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// ─── API: Autentikasi & Akun Pengguna (/api/auth/*) ──────────────────────────
-app.post('/api/auth/register', async (req, res) => {
-  await ensureDB();
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: 'Username, email, dan password wajib diisi.' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password minimal harus 6 karakter.' });
+// ─── Security: Rate Limiter Middleware (Anti Brute-Force) ─────────────────────
+const authAttemptTracker = new Map();
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 Menit
+const MAX_FAILED_ATTEMPTS = 5;
+
+function rateLimitAuth(req, res, next) {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+  const now = Date.now();
+  const record = authAttemptTracker.get(ip) || { attempts: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
+
+  if (now > record.resetTime) {
+    record.attempts = 0;
+    record.resetTime = now + RATE_LIMIT_WINDOW_MS;
   }
 
+  if (record.attempts >= MAX_FAILED_ATTEMPTS) {
+    const minutesLeft = Math.ceil((record.resetTime - now) / 60000);
+    return res.status(429).json({
+      error: `Terlalu banyak percobaan gagal. Akses diblokir sementara demi keamanan. Silakan coba lagi dalam ${minutesLeft} menit.`
+    });
+  }
+
+  req.authIpRecord = record;
+  req.authIpKey = ip;
+  next();
+}
+
+function registerFailedAttempt(ipRecord, ipKey) {
+  ipRecord.attempts += 1;
+  authAttemptTracker.set(ipKey, ipRecord);
+}
+
+function clearFailedAttempts(ipKey) {
+  authAttemptTracker.delete(ipKey);
+}
+
+// Helper Validasi Input Keamanan
+function validateRegistrationInput(username, email, password) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const usernameRegex = /^[a-zA-Z0-9_]{3,30}$/;
+
+  if (!username || !usernameRegex.test(username.trim())) {
+    return 'Username harus 3-30 karakter (hanya huruf, angka, dan underscore).';
+  }
+  if (!email || !emailRegex.test(email.trim())) {
+    return 'Format alamat email tidak valid.';
+  }
+  if (!password || password.length < 8) {
+    return 'Password minimal 8 karakter.';
+  }
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+    return 'Password harus mengombinasikan huruf dan setidaknya 1 angka.';
+  }
+  return null;
+}
+
+// ─── API: Autentikasi & Akun Pengguna (/api/auth/*) ──────────────────────────
+app.post('/api/auth/register', rateLimitAuth, async (req, res) => {
+  await ensureDB();
+  const { username, email, password, selected_tier, payment_method } = req.body;
+
+  const valError = validateRegistrationInput(username, email, password);
+  if (valError) {
+    registerFailedAttempt(req.authIpRecord, req.authIpKey);
+    return res.status(400).json({ error: valError });
+  }
+
+  const cleanUser = username.trim().toLowerCase();
+  const cleanEmail = email.trim().toLowerCase();
+  const tier = selected_tier === 'PRO' ? 'PRO' : 'FREE';
+
   try {
-    // Cek duplikasi akun
     const existing = await pool.query(
       'SELECT id FROM app_users WHERE username = $1 OR email = $2 LIMIT 1',
-      [username.trim().toLowerCase(), email.trim().toLowerCase()]
+      [cleanUser, cleanEmail]
     );
     if (existing.rows.length > 0) {
+      registerFailedAttempt(req.authIpRecord, req.authIpKey);
       return res.status(409).json({ error: 'Username atau email sudah terdaftar. Silakan gunakan yang lain.' });
     }
 
-    const salt = await bcrypt.genSalt(10);
+    // Hash dengan 12 Salt Rounds untuk proteksi ekstra
+    const salt = await bcrypt.genSalt(12);
     const hash = await bcrypt.hash(password, salt);
 
+    const initialStatus = tier === 'PRO' ? 'UNPAID' : 'FREE';
+
     const newRes = await pool.query(
-      'INSERT INTO app_users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
-      [username.trim().toLowerCase(), email.trim().toLowerCase(), hash]
+      'INSERT INTO app_users (username, email, password_hash, tier, payment_status, payment_method) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, tier, payment_status, created_at',
+      [cleanUser, cleanEmail, hash, tier, initialStatus, payment_method || 'FREE']
     );
     const user = newRes.rows[0];
+    clearFailedAttempts(req.authIpKey);
+
     const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({ message: 'Registrasi berhasil!', token, user });
@@ -2040,8 +2105,8 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { login, password } = req.body; // login bisa username atau email
+app.post('/api/auth/login', rateLimitAuth, async (req, res) => {
+  const { login, password } = req.body;
   if (!login || !password) {
     return res.status(400).json({ error: 'Username/Email dan password wajib diisi.' });
   }
@@ -2052,16 +2117,31 @@ app.post('/api/auth/login', async (req, res) => {
       [login.trim().toLowerCase()]
     );
     if (userRes.rows.length === 0) {
+      registerFailedAttempt(req.authIpRecord, req.authIpKey);
       return res.status(401).json({ error: 'Akun tidak ditemukan atau kombinasi password salah.' });
     }
     const user = userRes.rows[0];
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
+      registerFailedAttempt(req.authIpRecord, req.authIpKey);
       return res.status(401).json({ error: 'Kombinasi password dan akun salah.' });
     }
 
+    clearFailedAttempts(req.authIpKey);
     const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Login berhasil!', token, user: { id: user.id, username: user.username, email: user.email, created_at: user.created_at } });
+    res.json({
+      message: 'Login berhasil!',
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        tier: user.tier,
+        payment_status: user.payment_status,
+        tier_expires: user.tier_expires,
+        created_at: user.created_at
+      }
+    });
   } catch (err) {
     console.error('[Auth Login Error]:', err.message);
     res.status(500).json({ error: 'Gagal melakukan login: ' + err.message });
@@ -2070,10 +2150,9 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const uRes = await pool.query('SELECT id, username, email, created_at FROM app_users WHERE id = $1', [req.user.id]);
+    const uRes = await pool.query('SELECT id, username, email, tier, payment_status, tier_expires, created_at FROM app_users WHERE id = $1', [req.user.id]);
     if (uRes.rows.length === 0) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
-    
-    // Tarik statistik ringkasan evaluasi trading pengguna
+
     const statsRes = await pool.query(`
       SELECT 
         COUNT(*) as total_trades,
@@ -2089,6 +2168,81 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const winRate = sellCount > 0 ? ((Number(stats.win_count) / sellCount) * 100).toFixed(1) : '0.0';
 
     res.json({ user: uRes.rows[0], stats: { ...stats, win_rate: winRate } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── API: Fitur Pembayaran Berlangganan (/api/payment/*) ──────────────────────
+app.post('/api/payment/checkout', authenticateToken, async (req, res) => {
+  try {
+    const { method } = req.body; // 'QRIS', 'VA_BCA', 'VA_MANDIRI'
+    const vaNumber = method === 'VA_BCA' ? '88012' + Math.floor(10000000 + Math.random() * 90000000)
+                   : method === 'VA_MANDIRI' ? '89012' + Math.floor(10000000 + Math.random() * 90000000)
+                   : null;
+
+    await pool.query(
+      'UPDATE app_users SET tier = $1, payment_status = $2, payment_method = $3 WHERE id = $4',
+      ['PRO', 'UNPAID', method || 'QRIS', req.user.id]
+    );
+
+    res.json({
+      success: true,
+      amount: 99000,
+      currency: 'IDR',
+      method: method || 'QRIS',
+      vaNumber,
+      qrisUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=00020101021126580014ID.CO.MIDTRANS.WWW01189360091100000000005204581253033605405990005802ID5916STOCKPULSE_PRO6007JAKARTA63041A2B',
+      expiresInMinutes: 30
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/payment/confirm', authenticateToken, async (req, res) => {
+  try {
+    // Simulasi verifikasi instan settlement gateway
+    const expiresDate = new Date();
+    expiresDate.setDate(expiresDate.getDate() + 30); // 30 hari akses PRO
+
+    await pool.query(
+      'UPDATE app_users SET tier = $1, payment_status = $2, tier_expires = $3 WHERE id = $4',
+      ['PRO', 'PAID', expiresDate.toISOString(), req.user.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Pembayaran berhasil dikonfirmasi! Akun Anda kini berstatus PRO Member.',
+      tier: 'PRO',
+      expiresAt: expiresDate.toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── API: Watchlist Sinkronisasi PostgreSQL Cloud (/api/watchlist) ─────────
+app.get('/api/watchlist', authenticateToken, async (req, res) => {
+  try {
+    const uRes = await pool.query('SELECT watchlist FROM app_users WHERE id = $1', [req.user.id]);
+    if (uRes.rows.length === 0) return res.status(404).json({ error: 'User tidak ditemukan' });
+    const symbols = uRes.rows[0].watchlist || ['BBRI.JK', 'TLKM.JK', 'BBCA.JK', 'AAPL', 'GOOGL'];
+    res.json({ watchlist: symbols });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/watchlist', authenticateToken, async (req, res) => {
+  try {
+    const { watchlist } = req.body;
+    if (!Array.isArray(watchlist)) {
+      return res.status(400).json({ error: 'Watchlist harus berupa array simbol saham' });
+    }
+    const sanitized = watchlist.map(s => String(s).toUpperCase().trim()).filter(Boolean);
+    await pool.query('UPDATE app_users SET watchlist = $1 WHERE id = $2', [sanitized, req.user.id]);
+    res.json({ success: true, watchlist: sanitized });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

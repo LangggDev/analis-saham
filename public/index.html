@@ -21,12 +21,12 @@
         <header id="header" class="header" role="banner">
             <div class="header-left">
                 <button id="mobileWatchlistBtn" class="mobile-watchlist-btn" title="Buka Watchlist" aria-label="Buka Watchlist">
-                    <span class="mobile-btn-icon">📋</span>
+                    <span class="mobile-btn-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></span>
                     <span class="mobile-btn-text">Watchlist</span>
                 </button>
                 <div class="logo">
-                    <span class="logo-icon" aria-hidden="true">📊</span>
-                    <h1>Analis<span class="logo-accent">Trading</span></h1>
+                    <span class="logo-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00b972" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>
+                    <h1>Stock<span class="logo-accent">Pulse</span></h1>
                 </div>
             </div>
 
@@ -61,12 +61,11 @@
                     <button class="tf-btn" data-interval="1mo" id="tf-1mo" aria-pressed="false">1M</button>
                 </nav>
 
-                <!-- Pre-Order Count Badge -->
-                <button id="preorderBadgeBtn" class="btn-icon preorder-badge-btn" title="Pre-Order Aktif" aria-label="Lihat pre-order">
-                    🛒
-                    <span class="preorder-count-badge" id="preorderCountBadge" style="display:none;">0</span>
-                </button>
 
+
+                <button id="themeToggleBtn" class="btn-icon theme-toggle-btn" title="Mode Otomatis Jam: Light (06:00-17:59) / Dark (18:00-05:59)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="theme-icon"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                </button>
                 <button id="notifBellBtn" class="btn-icon notif-bell" title="Notifikasi Sinyal" aria-label="Toggle notifikasi">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -75,7 +74,8 @@
                     <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
                 </button>
                 <button id="btnAuthToggle" class="btn-auth-neon" title="Login / Profil Akun">
-                    <span>🔐 Login / Register</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    <span>Login / Register</span>
                 </button>
                 <div class="connection-status" id="connectionStatus" role="status" aria-live="polite">
                     <span class="status-dot" aria-hidden="true"></span>
@@ -187,43 +187,34 @@
                 <!-- Tab Navigation for Bottom Panels -->
                 <div class="panel-tabs" id="panelTabs" role="tablist" aria-label="Panel navigation">
                     <button class="panel-tab active" data-tab="quote" role="tab" aria-selected="true" id="tab-quote">
-                        <span class="tab-icon">📊</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
                         <span class="tab-label">Detail Harga</span>
                     </button>
                     <button class="panel-tab" data-tab="fundamental" role="tab" aria-selected="false" id="tab-fundamental">
-                        <span class="tab-icon">📋</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span>
                         <span class="tab-label">Fundamental</span>
                     </button>
-                    <button class="panel-tab" data-tab="preorder" role="tab" aria-selected="false" id="tab-preorder">
-                        <span class="tab-icon">🛒</span>
-                        <span class="tab-label">Pre-Order</span>
-                        <span class="tab-badge" id="tabPreorderBadge" style="display:none;">0</span>
-                    </button>
                     <button class="panel-tab" data-tab="signal" role="tab" aria-selected="false" id="tab-signal">
-                        <span class="tab-icon">🎯</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></span>
                         <span class="tab-label">Sinyal</span>
                     </button>
-                    <button class="panel-tab" data-tab="news" role="tab" aria-selected="false" id="tab-news">
-                        <span class="tab-icon">📰</span>
-                        <span class="tab-label">Berita</span>
-                    </button>
                     <button class="panel-tab" data-tab="sentiment" role="tab" aria-selected="false" id="tab-sentiment">
-                        <span class="tab-icon">💬</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
                         <span class="tab-label">Sentimen</span>
                     </button>
                     <button class="panel-tab" data-tab="screener" role="tab" aria-selected="false" id="tab-screener">
-                        <span class="tab-icon">🔍</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg></span>
                         <span class="tab-label">Screener</span>
                     </button>
                     <button class="panel-tab" data-tab="recommendation" role="tab" aria-selected="false" id="tab-recommendation">
-                        <span class="tab-icon">📋</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></span>
                         <span class="tab-label">Rekomendasi</span>
                         <span class="tab-badge rec-new-badge">NEW</span>
                     </button>
                     <button class="panel-tab" data-tab="journal" role="tab" aria-selected="false" id="tab-journal">
-                        <span class="tab-icon">📔</span>
+                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span>
                         <span class="tab-label">Jurnal & Evaluasi</span>
-                        <span class="tab-badge" style="background:#00e676;color:#000;font-weight:700;">PRO</span>
+                        <span class="tab-badge" style="background:#00b972;color:#fff;font-weight:700;">PRO</span>
                     </button>
                 </div>
 
@@ -303,88 +294,7 @@
                         </div>
                     </section>
 
-                    <!-- Pre-Order Panel -->
-                    <section class="tab-panel" data-panel="preorder" id="panel-preorder" role="tabpanel" aria-label="Pre-order saham">
-                        <div class="panel-body">
-                            <!-- Night Mode Banner -->
-                            <div class="preorder-night-banner" id="preorderNightBanner">
-                                <div class="night-banner-icon">🌙</div>
-                                <div class="night-banner-content">
-                                    <div class="night-banner-title">Mode Pre-Order Malam</div>
-                                    <div class="night-banner-desc" id="nightBannerDesc">Pasar tutup — siapkan order untuk besok</div>
-                                </div>
-                                <div class="night-banner-time" id="nightBannerTime">—</div>
-                            </div>
 
-                            <!-- Quick Order Form -->
-                            <div class="preorder-form" id="preorderForm">
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="poSymbol">Simbol</label>
-                                        <input type="text" id="poSymbol" placeholder="BBRI.JK" class="form-input mono">
-                                    </div>
-                                    <div class="form-group form-group-sm">
-                                        <label for="poType">Tipe</label>
-                                        <div class="toggle-group" id="poTypeToggle">
-                                            <button class="toggle-btn active" data-value="BUY" id="poBuyBtn">BUY</button>
-                                            <button class="toggle-btn" data-value="SELL" id="poSellBtn">SELL</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="poPrice">Target Harga</label>
-                                        <input type="number" id="poPrice" placeholder="0" class="form-input mono" step="any">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="poQty">Jumlah (Lot)</label>
-                                        <input type="number" id="poQty" placeholder="1" class="form-input mono" min="1">
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="poStopLoss">Stop Loss <span class="form-optional">(opsional)</span></label>
-                                        <input type="number" id="poStopLoss" placeholder="0" class="form-input mono" step="any">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="poTakeProfit">Take Profit <span class="form-optional">(opsional)</span></label>
-                                        <input type="number" id="poTakeProfit" placeholder="0" class="form-input mono" step="any">
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group form-group-full">
-                                        <label for="poNotes">Catatan <span class="form-optional">(opsional)</span></label>
-                                        <input type="text" id="poNotes" placeholder="Alasan order, target, dll..." class="form-input">
-                                    </div>
-                                </div>
-                                <div class="form-row form-actions">
-                                    <div class="preorder-total" id="preorderTotal">
-                                        <span class="total-label">Estimasi Total:</span>
-                                        <span class="total-value mono" id="preorderTotalValue">Rp 0</span>
-                                    </div>
-                                    <button class="btn-primary" id="poSubmitBtn">
-                                        <span>🛒</span> Buat Pre-Order
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Orders List -->
-                            <div class="preorder-list-header">
-                                <h4>📋 Daftar Pre-Order</h4>
-                                <div class="preorder-list-actions">
-                                    <button class="btn-text" id="poExportBtn" title="Export CSV">📥 Export</button>
-                                    <button class="btn-text" id="poClearExecutedBtn" title="Hapus yang sudah selesai">🗑 Bersihkan</button>
-                                </div>
-                            </div>
-                            <div class="preorder-list" id="preorderList">
-                                <div class="empty-state" id="preorderEmptyState">
-                                    <span class="empty-state-icon">🛒</span>
-                                    <span class="empty-state-title">Belum ada pre-order</span>
-                                    <span class="empty-state-text">Buat pre-order di atas untuk mempersiapkan transaksi</span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
 
                     <!-- Signal Panel -->
                     <section class="tab-panel" data-panel="signal" id="panel-signal" role="tabpanel" aria-label="Sinyal trading">
@@ -505,19 +415,7 @@
                         </div>
                     </section>
 
-                    <!-- News Panel -->
-                    <section class="tab-panel" data-panel="news" id="panel-news" role="tabpanel" aria-label="Berita terkait saham">
-                        <div class="panel-body">
-                            <ul id="newsFeed" class="news-feed" aria-label="Daftar berita">
-                                <!-- News items populated dynamically by JavaScript -->
-                                <li class="empty-state" id="newsEmptyState">
-                                    <span class="empty-state-icon" aria-hidden="true">📰</span>
-                                    <span class="empty-state-title">Belum ada berita</span>
-                                    <span class="empty-state-text">Berita akan dimuat setelah memilih saham</span>
-                                </li>
-                            </ul>
-                        </div>
-                    </section>
+
 
                     <!-- Sentiment Panel -->
                     <section class="tab-panel" data-panel="sentiment" id="panel-sentiment" role="tabpanel" aria-label="Analisis Sentimen">

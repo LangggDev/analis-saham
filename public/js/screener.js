@@ -11,7 +11,7 @@ const StockScreener = {
     IDX_SECTORS: {
         'BASIC-IND': {
             name: 'Basic Materials',
-            icon: '🧪',
+            icon: '',
             symbols: [
                 'BRPT.JK', 'TPIA.JK', 'INKP.JK', 'TKIM.JK', 'ANTM.JK', 'INCO.JK', 'MDKA.JK', 'NCKL.JK',
                 'MBMA.JK', 'SMGR.JK', 'INTP.JK', 'AVIA.JK', 'TINS.JK', 'PSAB.JK', 'DKFT.JK', 'NIKL.JK',
@@ -22,7 +22,7 @@ const StockScreener = {
         },
         'ENERGY': {
             name: 'Energy',
-            icon: '🔥',
+            icon: '',
             symbols: [
                 'ADRO.JK', 'PTBA.JK', 'PGAS.JK', 'MEDC.JK', 'AKRA.JK', 'ESSA.JK', 'AMMN.JK', 'BREN.JK',
                 'CUAN.JK', 'PGEO.JK', 'HRUM.JK', 'ITMG.JK', 'DOID.JK', 'INDY.JK', 'PTRO.JK', 'BYAN.JK',
@@ -33,7 +33,7 @@ const StockScreener = {
         },
         'CYCLICAL': {
             name: 'Consumer Cyclicals',
-            icon: '👕',
+            icon: '',
             symbols: [
                 'ACES.JK', 'MAPI.JK', 'MAPA.JK', 'ERAA.JK', 'RALS.JK', 'LPPF.JK', 'AUTO.JK', 'DRMA.JK',
                 'ASLC.JK', 'MPPA.JK', 'CINT.JK', 'WOOD.JK', 'PANR.JK', 'SCMA.JK', 'MNCN.JK', 'MSIN.JK',
@@ -43,7 +43,7 @@ const StockScreener = {
         },
         'FINANCE': {
             name: 'Finance',
-            icon: '🪙',
+            icon: '',
             symbols: [
                 'BBRI.JK', 'BBCA.JK', 'BMRI.JK', 'BBNI.JK', 'BRIS.JK', 'ARTO.JK', 'BBHI.JK', 'BNGA.JK',
                 'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'BTPS.JK', 'NISP.JK', 'PNLF.JK', 'BFIN.JK', 'SRTG.JK',
@@ -54,7 +54,7 @@ const StockScreener = {
         },
         'INFRASTRUC': {
             name: 'Infrastructure',
-            icon: '🛣️',
+            icon: '',
             symbols: [
                 'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK', 'FREN.JK', 'CENT.JK',
                 'GHON.JK', 'GOLD.JK', 'META.JK', 'CMNP.JK', 'KEEN.JK', 'POWR.JK', 'TGRA.JK', 'ACST.JK',
@@ -64,7 +64,7 @@ const StockScreener = {
         },
         'HEALTH': {
             name: 'Healthcare',
-            icon: '🏥',
+            icon: '',
             symbols: [
                 'KLBF.JK', 'KAEF.JK', 'MIKA.JK', 'HEAL.JK', 'SILO.JK', 'SIDO.JK', 'INAF.JK', 'SAME.JK',
                 'PRDA.JK', 'TSPC.JK', 'PEHA.JK', 'DVLA.JK', 'PYFA.JK', 'BMHS.JK', 'CARE.JK', 'DGNS.JK',
@@ -73,7 +73,7 @@ const StockScreener = {
         },
         'INDUSTRIAL': {
             name: 'Industrials',
-            icon: '🏭',
+            icon: '',
             symbols: [
                 'ASII.JK', 'UNTR.JK', 'HEXA.JK', 'PTPP.JK', 'WIKA.JK', 'ADHI.JK', 'WEGE.JK', 'TOTL.JK',
                 'MARK.JK', 'IMPC.JK', 'KBLI.JK', 'JECC.JK', 'ARNA.JK', 'BHIT.JK', 'CCSI.JK', 'GMFI.JK',
@@ -82,7 +82,7 @@ const StockScreener = {
         },
         'NON-CYCLICAL': {
             name: 'Consumer Non-Cyclicals',
-            icon: '🛒',
+            icon: '',
             symbols: [
                 'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'CPIN.JK', 'JPFA.JK', 'CMRY.JK', 'CLEO.JK', 'MYOR.JK',
                 'AMRT.JK', 'GGRM.JK', 'HMSP.JK', 'STTP.JK', 'AALI.JK', 'LSIP.JK', 'TAPG.JK', 'DSNG.JK',
@@ -92,7 +92,7 @@ const StockScreener = {
         },
         'PROPERTY': {
             name: 'Property & Real Estate',
-            icon: '🏠',
+            icon: '',
             symbols: [
                 'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'ASRI.JK', 'APLN.JK', 'DUTI.JK', 'MKPI.JK',
                 'DILD.JK', 'KIJA.JK', 'BEST.JK', 'LPKR.JK', 'LPCK.JK', 'PPRO.JK', 'JRPT.JK', 'BKSL.JK',
@@ -102,7 +102,7 @@ const StockScreener = {
         },
         'TRANSPORT': {
             name: 'Transportation & Logistics',
-            icon: '✈️',
+            icon: '',
             symbols: [
                 'BIRD.JK', 'SMDR.JK', 'ASSA.JK', 'TMAS.JK', 'HELI.JK', 'HAIS.JK', 'GIAA.JK', 'CMPP.JK',
                 'IPCC.JK', 'IPCM.JK', 'SAFE.JK', 'BPTR.JK', 'TRUK.JK', 'WEHA.JK', 'AKSI.JK', 'BLTA.JK',
@@ -111,7 +111,7 @@ const StockScreener = {
         },
         'TECHNOLOGY': {
             name: 'Technology',
-            icon: '💻',
+            icon: '',
             symbols: [
                 'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'MLPT.JK', 'DCII.JK', 'MTDL.JK', 'WIFI.JK', 'BELI.JK',
                 'AXIO.JK', 'MCAS.JK', 'NFCX.JK', 'DMMX.JK', 'ENVY.JK', 'ATIC.JK', 'CASH.JK', 'DIVA.JK',

@@ -157,7 +157,7 @@ const StockRecommendation = {
 
         let html = `
             <div class="rec-meta">
-                <span class="rec-meta-info">📊 ${data.totalAnalyzed} saham dianalisis · Update: ${dateStr} ${timeStr}</span>
+                <span class="rec-meta-info">${data.totalAnalyzed} saham dianalisis · Update: ${dateStr} ${timeStr}</span>
             </div>
         `;
 
@@ -165,7 +165,7 @@ const StockRecommendation = {
         if (data.buyPicks && data.buyPicks.length > 0) {
             html += `<div class="rec-section">
                 <h4 class="rec-section-title rec-buy-title">
-                    <span class="rec-section-icon">🟢</span> Rekomendasi Beli (${data.buyPicks.length})
+                    Rekomendasi Beli (${data.buyPicks.length})
                 </h4>
                 <div class="rec-cards-grid">
                     ${data.buyPicks.map((pick, idx) => this._renderPickCard(pick, 'buy', idx)).join('')}
@@ -177,7 +177,7 @@ const StockRecommendation = {
         if (data.holdPicks && data.holdPicks.length > 0) {
             html += `<div class="rec-section">
                 <h4 class="rec-section-title rec-hold-title">
-                    <span class="rec-section-icon">🟡</span> Hold / Pantau (${data.holdPicks.length})
+                    Hold / Pantau (${data.holdPicks.length})
                 </h4>
                 <div class="rec-cards-grid">
                     ${data.holdPicks.map((pick, idx) => this._renderPickCard(pick, 'hold', idx)).join('')}
@@ -189,7 +189,7 @@ const StockRecommendation = {
         if (data.sellPicks && data.sellPicks.length > 0) {
             html += `<div class="rec-section">
                 <h4 class="rec-section-title rec-sell-title">
-                    <span class="rec-section-icon">🔴</span> Hindari / Jual (${data.sellPicks.length})
+                    Hindari / Jual (${data.sellPicks.length})
                 </h4>
                 <div class="rec-cards-grid rec-cards-compact">
                     ${data.sellPicks.map((pick, idx) => this._renderPickCard(pick, 'sell', idx)).join('')}
@@ -340,42 +340,38 @@ const StockRecommendation = {
             detailsHTML = `
                 <div class="rec-card-levels">
                     <div class="rec-level rec-level-entry">
-                        <span class="rec-level-label">📈 Entry</span>
+                        <span class="rec-level-label">Entry</span>
                         <span class="rec-level-value">${fmtPrice(pick.entryLow)} - ${fmtPrice(pick.entryHigh)}</span>
                     </div>
                     <div class="rec-level rec-level-sl">
-                        <span class="rec-level-label">🛑 Stop Loss</span>
+                        <span class="rec-level-label">Stop Loss</span>
                         <span class="rec-level-value">${fmtPrice(pick.stopLoss)}${pe.lossPercent ? ` <small class="rec-loss-pct">(-${pe.lossPercent}%)</small>` : ''}</span>
                     </div>
                     <div class="rec-level rec-level-tp">
-                        <span class="rec-level-label">🎯 Take Profit</span>
+                        <span class="rec-level-label">Take Profit</span>
                         <span class="rec-level-value">${fmtPrice(pick.takeProfit)}${pe.profitPercent ? ` <small class="rec-profit-pct">(+${pe.profitPercent}%)</small>` : ''}</span>
                     </div>
                 </div>
                 ${hasEstimation ? `
                 <div class="rec-card-estimation">
                     <div class="rec-est-header">
-                        <span class="rec-est-title">📊 Estimasi Profit</span>
+                        <span class="rec-est-title">Estimasi Profit</span>
                         <span class="rec-est-confidence ${confClass}">${pe.confidenceLevel || 'N/A'}</span>
                     </div>
                     <div class="rec-est-grid">
                         <div class="rec-est-item">
-                            <span class="rec-est-icon">⏱️</span>
                             <span class="rec-est-label">Waktu</span>
                             <span class="rec-est-value">${pe.timeEstimateLabel || '—'}</span>
                         </div>
                         <div class="rec-est-item">
-                            <span class="rec-est-icon">💰</span>
                             <span class="rec-est-label">Profit</span>
                             <span class="rec-est-value rec-profit-pct">+${pe.profitPercent || 0}%</span>
                         </div>
                         <div class="rec-est-item">
-                            <span class="rec-est-icon">📊</span>
                             <span class="rec-est-label">RRR</span>
                             <span class="rec-est-value">1:${pe.riskRewardRatio || 0}</span>
                         </div>
                         <div class="rec-est-item">
-                            <span class="rec-est-icon">🎯</span>
                             <span class="rec-est-label">Win Prob</span>
                             <span class="rec-est-value ${winProbClass}">${pe.winProbability || 0}%</span>
                         </div>
@@ -411,17 +407,16 @@ const StockRecommendation = {
                 </div>
                 ${detailsHTML}
                 <div class="rec-card-indicators">
-                    ${pick.tradingViewRating && pick.tradingViewRating !== 'N/A' ? `<span class="rec-indicator rec-ind-tv rec-ind-tv-${pick.tradingViewRating.toLowerCase().replace(/_/g, '-')}" title="TradingView Official Screener Rating (Score: ${pick.tvRecommendScore ?? 0})">⚡ TV: ${pick.tradingViewRating.replace(/_/g, ' ')}</span>` : ''}
+                    ${pick.tradingViewRating && pick.tradingViewRating !== 'N/A' ? `<span class="rec-indicator rec-ind-tv rec-ind-tv-${pick.tradingViewRating.toLowerCase().replace(/_/g, '-')}" title="TradingView Official Screener Rating (Score: ${pick.tvRecommendScore ?? 0})">TV: ${pick.tradingViewRating.replace(/_/g, ' ')}</span>` : ''}
                     <span class="rec-indicator" title="RSI">RSI: ${pick.rsi || '—'}</span>
                     <span class="rec-indicator" title="Volume Ratio">Vol: ${pick.volRatio || '—'}x</span>
                     ${pick.vwap ? `<span class="rec-indicator" title="VWAP">VWAP: ${fmtPrice(pick.vwap)}</span>` : ''}
-                    ${pick.obvDivergence === 'ACCUMULATION' ? `<span class="rec-indicator" style="color:#00e676;" title="OBV Accumulation (Smart Money)">💎 OBV Acc</span>` : pick.obvDivergence === 'DISTRIBUTION' ? `<span class="rec-indicator" style="color:#ff3d00;" title="OBV Distribution">🛑 OBV Dist</span>` : pick.obvTrend && pick.obvTrend !== 'FLAT' ? `<span class="rec-indicator" title="OBV Trend">OBV: ${pick.obvTrend}</span>` : ''}
-                    ${pick.candlestickPattern && pick.candlestickPattern !== 'NONE' ? `<span class="rec-indicator" style="border-color:#ff9100;" title="Candlestick Pattern">🕯️ ${pick.candlestickPattern.replace(/_/g, ' ')}</span>` : ''}
+                    ${pick.obvDivergence === 'ACCUMULATION' ? `<span class="rec-indicator" style="color:#00b972;" title="OBV Accumulation (Smart Money)">OBV Acc</span>` : pick.obvDivergence === 'DISTRIBUTION' ? `<span class="rec-indicator" style="color:#f43f5e;" title="OBV Distribution">OBV Dist</span>` : pick.obvTrend && pick.obvTrend !== 'FLAT' ? `<span class="rec-indicator" title="OBV Trend">OBV: ${pick.obvTrend}</span>` : ''}
+                    ${pick.candlestickPattern && pick.candlestickPattern !== 'NONE' ? `<span class="rec-indicator" style="border-color:#f59e0b;" title="Candlestick Pattern">${pick.candlestickPattern.replace(/_/g, ' ')}</span>` : ''}
                     <span class="rec-indicator" title="Support">S: ${fmtPrice(pick.support)}</span>
                     <span class="rec-indicator" title="Resistance">R: ${fmtPrice(pick.resistance)}</span>
                 </div>
                 <div class="rec-card-reasoning">
-                    <span class="rec-reasoning-icon">💡</span>
                     <span class="rec-reasoning-text">${pick.reasoning || ''}</span>
                 </div>
             </div>

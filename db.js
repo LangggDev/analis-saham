@@ -57,8 +57,18 @@ export async function initDB() {
         username VARCHAR(100) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
+        watchlist TEXT[] DEFAULT ARRAY['BBRI.JK', 'TLKM.JK', 'BBCA.JK', 'AAPL', 'GOOGL'],
+        tier VARCHAR(20) DEFAULT 'FREE',
+        payment_status VARCHAR(20) DEFAULT 'FREE',
+        payment_method VARCHAR(50) DEFAULT 'FREE',
+        tier_expires TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE app_users ADD COLUMN IF NOT EXISTS watchlist TEXT[] DEFAULT ARRAY['BBRI.JK', 'TLKM.JK', 'BBCA.JK', 'AAPL', 'GOOGL'];
+      ALTER TABLE app_users ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'FREE';
+      ALTER TABLE app_users ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'FREE';
+      ALTER TABLE app_users ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'FREE';
+      ALTER TABLE app_users ADD COLUMN IF NOT EXISTS tier_expires TIMESTAMP WITH TIME ZONE;
     `);
 
     // 2. Tabel app_transactions (Jurnal & Evaluasi Trading)

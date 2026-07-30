@@ -855,7 +855,7 @@ class WatchlistManager {
         this._priceCache = {};
     }
 
-    init() {
+    async init() {
         this._container = document.getElementById('watchlist');
         const saved = localStorage.getItem(this.STORAGE_KEY);
         if (saved) {
@@ -870,6 +870,31 @@ class WatchlistManager {
         }
         this.render();
         this.updatePrices();
+
+        // Sync with PostgreSQL Cloud if user is logged in
+        await this.syncWithCloud();
+    }
+
+    async syncWithCloud() {
+        const token = window.JournalManager?.token || localStorage.getItem('stockpulse_jwt');
+        if (!token) return;
+
+        try {
+            const res = await fetch('/api/watchlist', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data.watchlist) && data.watchlist.length > 0) {
+                    this.symbols = data.watchlist;
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.symbols));
+                    this.render();
+                    this.updatePrices();
+                }
+            }
+        } catch (err) {
+            console.warn('[Watchlist Cloud Sync Error]:', err.message);
+        }
     }
 
     add(symbol) {
@@ -889,6 +914,17 @@ class WatchlistManager {
 
     _save() {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.symbols));
+        const token = window.JournalManager?.token || localStorage.getItem('stockpulse_jwt');
+        if (token) {
+            fetch('/api/watchlist', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ watchlist: this.symbols })
+            }).catch(err => console.warn('[Watchlist Cloud Push Error]:', err.message));
+        }
     }
 
     render() {
@@ -1024,6 +1060,7 @@ class App {
         });
 
         // Event listeners
+        this._setupAutoTheme();
         this._setupSearch();
         this._setupTimeframeButtons();
         this._setupKeyboard();
@@ -1046,8 +1083,9 @@ class App {
 
         const toggleMobileSidebar = (show) => {
             if (!sidebar) return;
-            const shouldShow = show !== undefined ? show : !sidebar.classList.contains('active');
+            const shouldShow = show !== undefined ? show : (!sidebar.classList.contains('active') && !sidebar.classList.contains('open'));
             sidebar.classList.toggle('active', shouldShow);
+            sidebar.classList.toggle('open', shouldShow);
             if (sidebarBackdrop) sidebarBackdrop.classList.toggle('active', shouldShow);
         };
 
@@ -1062,7 +1100,7 @@ class App {
         const watchlistEl = document.getElementById('watchlist');
         if (watchlistEl) {
             watchlistEl.addEventListener('click', (e) => {
-                if (window.innerWidth < 900) {
+                if (window.innerWidth <= 1024) {
                     toggleMobileSidebar(false);
                 }
             });
@@ -1091,6 +1129,42 @@ class App {
         // Render existing pre-orders
         this._renderPreOrders(PreOrderManager.getAllOrders());
         this._updatePreOrderBadge();
+    }
+
+    _setupAutoTheme() {
+        const updateThemeByTime = () => {
+            const manualTheme = sessionStorage.getItem('stockpulse_manual_theme');
+            if (manualTheme) {
+                document.documentElement.setAttribute('data-theme', manualTheme);
+                return;
+            }
+
+            const now = new Date();
+            const hours = now.getHours(); // 0-23
+            // 06:00 to 17:59 => light, 18:00 to 05:59 => dark
+            const isDay = hours >= 6 && hours < 18;
+            const theme = isDay ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) {
+                btn.title = `Mode Otomatis Jam: ${theme.toUpperCase()} (06:00-17:59 Light / 18:00-05:59 Dark)`;
+            }
+        };
+
+        updateThemeByTime();
+        setInterval(updateThemeByTime, 60000);
+
+        const btn = document.getElementById('themeToggleBtn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme') || 'dark';
+                const next = current === 'light' ? 'dark' : 'light';
+                sessionStorage.setItem('stockpulse_manual_theme', next);
+                document.documentElement.setAttribute('data-theme', next);
+                btn.title = `Mode Manual: ${next.toUpperCase()} (Klik untuk toggle)`;
+            });
+        }
     }
 
     /* ---- Load Symbol ---- */

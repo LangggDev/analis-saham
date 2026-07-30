@@ -207,7 +207,7 @@ const SignalEngine = {
                     name: 'Candlestick Pattern',
                     signal: csLabel,
                     value: candlestickPattern.replace(/_/g, ' '),
-                    desc: `${candlestickScore > 0 ? '🟢' : '🔴'} Pola ${candlestickPattern.replace(/_/g, ' ')} terdeteksi`,
+                    desc: `Pola ${candlestickPattern.replace(/_/g, ' ')} terdeteksi`,
                     _score: candlestickScore > 0 ? 0.6 : -0.6,
                 });
             }
@@ -259,7 +259,7 @@ const SignalEngine = {
                     name: 'Divergence Scanner',
                     signal: 'SELL',
                     value: `${divergenceStrength}x konfirmasi`,
-                    desc: `🚨 Bull Trap (${divergenceStrength}x divergence): ${rsiDivBearish ? 'RSI ' : ''}${obvDivBearish ? 'OBV ' : ''}${macdDivBearish ? 'MACD' : ''}`,
+                    desc: `Bull Trap (${divergenceStrength}x divergence): ${rsiDivBearish ? 'RSI ' : ''}${obvDivBearish ? 'OBV ' : ''}${macdDivBearish ? 'MACD' : ''}`,
                     _score: divergenceStrength >= 2 ? -0.9 : -0.6,
                 });
             } else if (divergence === 'BULLISH_ACCUMULATION') {
@@ -267,7 +267,7 @@ const SignalEngine = {
                     name: 'Divergence Scanner',
                     signal: 'BUY',
                     value: `${divergenceStrength}x konfirmasi`,
-                    desc: `🟢 Bullish Accumulation (${divergenceStrength}x divergence): ${rsiDivBullish ? 'RSI ' : ''}${obvDivBullish ? 'OBV ' : ''}${macdDivBullish ? 'MACD' : ''}`,
+                    desc: `Bullish Accumulation (${divergenceStrength}x divergence): ${rsiDivBullish ? 'RSI ' : ''}${obvDivBullish ? 'OBV ' : ''}${macdDivBullish ? 'MACD' : ''}`,
                     _score: divergenceStrength >= 2 ? 0.9 : 0.6,
                 });
             }
@@ -282,7 +282,7 @@ const SignalEngine = {
                 name: 'Liquidity Filter',
                 signal: 'NEUTRAL',
                 value: `Turnover ${Math.round(dailyTurnover / 1000000)}M`,
-                desc: '⚠️ Proteksi Likuiditas: Volume/transaksi rendah (rawan jebakan volatilitas saham gila/penny stock)',
+                desc: 'Proteksi Likuiditas: Volume/transaksi rendah (rawan volatilitas tinggi)',
                 _score: -0.5
             });
         }
@@ -552,14 +552,14 @@ const SignalEngine = {
             } else if (histMomentum === 'shrinking') {
                 score = Math.max(score - 0.2, 0.1);
                 signal = 'NEUTRAL';
-                description = 'MACD bullish tapi momentum melemah ↓';
+                description = 'MACD bullish tapi momentum melemah';
             } else {
                 signal = 'BUY';
                 description = 'MACD di atas signal line';
             }
             if (freshCrossover) {
                 score = Math.min(score + 0.2, 1);
-                description = '🔥 MACD baru saja bullish crossover!';
+                description = 'MACD baru saja bullish crossover!';
                 signal = 'BUY';
             }
         } else if (lastMACD < lastSignal) {
@@ -570,19 +570,19 @@ const SignalEngine = {
                 // Histogram growing (less negative) = bearish momentum weakening
                 score = Math.min(score + 0.2, -0.1);
                 signal = 'NEUTRAL';
-                description = 'MACD bearish tapi momentum melemah ↑';
+                description = 'MACD bearish tapi momentum melemah';
             } else if (histMomentum === 'shrinking') {
                 // Histogram shrinking (more negative) = bearish momentum strengthening
                 score = Math.max(score - 0.15, -1);
                 signal = 'SELL';
-                description = 'MACD bearish & momentum menguat ↓';
+                description = 'MACD bearish & momentum menguat';
             } else {
                 signal = 'SELL';
                 description = 'MACD di bawah signal line';
             }
             if (freshCrossover) {
                 score = Math.max(score - 0.2, -1);
-                description = '⚠️ MACD baru saja bearish crossover!';
+                description = 'MACD baru saja bearish crossover!';
                 signal = 'SELL';
             }
         } else {
@@ -674,12 +674,12 @@ const SignalEngine = {
         if (wasBelow && isAbove) {
             // Golden Cross — very bullish
             signal = 'STRONG_BUY';
-            description = '✨ Golden Cross! SMA 50 menembus di atas SMA 200';
+            description = 'Golden Cross! SMA 50 menembus di atas SMA 200';
             score = 0.9;
         } else if (wasAbove && isBelow) {
             // Death Cross — very bearish
             signal = 'STRONG_SELL';
-            description = '💀 Death Cross! SMA 50 jatuh di bawah SMA 200';
+            description = 'Death Cross! SMA 50 jatuh di bawah SMA 200';
             score = -0.9;
         } else if (isAbove) {
             signal = 'BUY';
