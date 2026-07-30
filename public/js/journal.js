@@ -133,6 +133,12 @@ const JournalManager = {
                     <label>Kata Sandi (Password)</label>
                     <input type="password" id="passwordInput" placeholder="••••••••" required>
                 </div>
+                <div class="form-group form-remember-me">
+                    <label class="checkbox-remember">
+                        <input type="checkbox" id="rememberMeInput" checked>
+                        <span>Ingat Saya (Tetap login di perangkat ini)</span>
+                    </label>
+                </div>
                 <div id="authErrorMsg" class="auth-error" style="display:none;"></div>
                 <button type="submit" class="btn-submit-neon">Masuk ke Dashboard</button>
             </form>
@@ -200,13 +206,14 @@ const JournalManager = {
         e.preventDefault();
         const loginVal = document.getElementById('loginInput').value;
         const passVal = document.getElementById('passwordInput').value;
+        const rememberVal = document.getElementById('rememberMeInput')?.checked ?? true;
         const errorDiv = document.getElementById('authErrorMsg');
 
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: loginVal, password: passVal })
+                body: JSON.stringify({ login: loginVal, password: passVal, remember_me: rememberVal })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Login gagal.');

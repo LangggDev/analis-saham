@@ -6511,4 +6511,21 @@ body {
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.75rem;
+}
+
+.checkbox-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.checkbox-remember input[type="checkbox"] {
+  accent-color: var(--accent-primary);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
 }

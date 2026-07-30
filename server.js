@@ -2106,7 +2106,7 @@ app.post('/api/auth/register', rateLimitAuth, async (req, res) => {
 });
 
 app.post('/api/auth/login', rateLimitAuth, async (req, res) => {
-  const { login, password } = req.body;
+  const { login, password, remember_me } = req.body;
   if (!login || !password) {
     return res.status(400).json({ error: 'Username/Email dan password wajib diisi.' });
   }
@@ -2128,7 +2128,8 @@ app.post('/api/auth/login', rateLimitAuth, async (req, res) => {
     }
 
     clearFailedAttempts(req.authIpKey);
-    const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const tokenExpiry = remember_me ? '30d' : '1d';
+    const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: tokenExpiry });
     res.json({
       message: 'Login berhasil!',
       token,
