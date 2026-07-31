@@ -516,45 +516,60 @@
                     <!-- Recommendation Panel -->
                     <section class="tab-panel" data-panel="recommendation" id="panel-recommendation" role="tabpanel" aria-label="Rekomendasi Saham">
                         <div class="panel-body recommendation-panel">
-                            <!-- Today Recommendations -->
-                            <div class="rec-block">
-                                <div class="rec-block-header">
-                                    <div class="rec-block-title-group">
-                                        <h3 class="rec-block-title">📊 Rekomendasi Saham Hari Ini</h3>
-                                        <span class="rec-block-subtitle">Analisis real-time 300+ saham di seluruh 11 sektor IDX</span>
-                                    </div>
-                                    <button class="rec-refresh-btn" id="recRefreshTodayBtn" title="Refresh">
-                                        🔄 Refresh
-                                    </button>
+                            
+                            <!-- Strategy Category Nav (Stockbit Professional Style) -->
+                            <div class="rec-strategy-nav">
+                                <button class="rec-strategy-btn active" data-strategy="scalping" id="btn-strat-scalping">
+                                    <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                                    <span>Scalping</span>
+                                </button>
+                                <button class="rec-strategy-btn" data-strategy="swing" id="btn-strat-swing">
+                                    <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                                    <span>Swing Trading</span>
+                                </button>
+                                <button class="rec-strategy-btn" data-strategy="bsjp" id="btn-strat-bsjp" title="Beli Sore Jual Pagi">
+                                    <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 18a5 5 0 0 0-10 0"></path><line x1="12" y1="2" x2="12" y2="9"></line><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line><line x1="1" y1="18" x2="3" y2="18"></line><line x1="21" y1="18" x2="23" y2="18"></line><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line></svg>
+                                    <span>BSJP (Sore - Pagi)</span>
+                                </button>
+                                <button class="rec-strategy-btn" data-strategy="bpjs" id="btn-strat-bpjs" title="Beli Pagi Jual Sore">
+                                    <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                                    <span>BPJS (Pagi - Sore)</span>
+                                </button>
+                            </div>
+
+                            <!-- Strategy Banner Guidance & Header -->
+                            <div class="rec-strategy-banner" id="recStrategyBanner">
+                                <div class="rec-banner-left">
+                                    <h3 class="rec-banner-title" id="recBannerTitle">Scalping — Intraday Real-Time</h3>
+                                    <p class="rec-banner-desc" id="recBannerDesc">Analisis momentum cepat dan likuiditas tinggi untuk ambil cuan harian pada saham bervolatilitas aktif.</p>
                                 </div>
-                                <div class="rec-content" id="recTodayContent">
-                                    <div class="rec-empty-state">
-                                        <span class="rec-empty-icon">📋</span>
-                                        <span class="rec-empty-title">Belum ada rekomendasi</span>
-                                        <span class="rec-empty-text">Klik tab Rekomendasi untuk memuat analisis</span>
-                                    </div>
+                                <div class="rec-banner-right">
+                                    <button class="rec-refresh-btn" id="recRefreshBtn" title="Muat Ulang Analisis">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                        <span>Refresh Data</span>
+                                    </button>
                                 </div>
                             </div>
 
-                            <!-- Tomorrow Recommendations -->
-                            <div class="rec-block rec-block-tomorrow">
-                                <div class="rec-block-header">
-                                    <div class="rec-block-title-group">
-                                        <h3 class="rec-block-title">🌅 Rekomendasi Besok Pagi</h3>
-                                        <span class="rec-block-subtitle">Tersedia mulai pukul 19:00 WIB · Analisis end-of-day</span>
-                                    </div>
-                                    <button class="rec-refresh-btn" id="recRefreshTomorrowBtn" title="Refresh">
-                                        🔄 Refresh
-                                    </button>
-                                </div>
-                                <div class="rec-content" id="recTomorrowContent">
-                                    <div class="rec-empty-state">
-                                        <span class="rec-empty-icon">🌙</span>
-                                        <span class="rec-empty-title">Memuat status...</span>
-                                        <span class="rec-empty-text">Rekomendasi besok pagi tersedia setelah pukul 19:00 WIB</span>
-                                    </div>
+                            <!-- Sub-Tab Switcher for Scalping (Hari Ini vs Besok Pagi) -->
+                            <div class="rec-sub-nav" id="recScalpingSubNav">
+                                <button class="rec-sub-btn active" data-sub="today" id="btn-sub-today">
+                                    <span>Hari Ini (Live Session)</span>
+                                </button>
+                                <button class="rec-sub-btn" data-sub="tomorrow" id="btn-sub-tomorrow">
+                                    <span>Besok Pagi (Pre-Open)</span>
+                                </button>
+                            </div>
+
+                            <!-- Dynamic Content Container -->
+                            <div class="rec-main-content" id="recMainContent">
+                                <div class="rec-empty-state">
+                                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                    <span class="rec-empty-title">Memuat data rekomendasi...</span>
+                                    <span class="rec-empty-text">Harap tunggu sebentar sementara sistem AI mengalkulasi sinyal saham</span>
                                 </div>
                             </div>
+
                         </div>
                     </section>
 

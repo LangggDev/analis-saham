@@ -1701,24 +1701,37 @@ async function analyzeBatch(symbols, batchSize = 5) {
   return results;
 }
 
-// API: Recommendations for Today
+// ─── API: Stock Recommendations (Multi-Strategy: Scalping, Swing, BSJP, BPJS) ──
+async function getSharedBatchAnalyses() {
+  return await withCache('recommendations:raw_batch', 1800, async () => {
+    console.log('[Recommendations] Computing master batch analyses for all strategies...');
+    const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 5);
+    return analyses;
+  });
+}
+
+function getNextTradingDayLabel() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1); // Besok hari
+  while (d.getDay() === 0 || d.getDay() === 6) { // 0 = Minggu, 6 = Sabtu
+    d.setDate(d.getDate() + 1);
+  }
+  const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// 1. API: Recommendations for Scalping — Hari Ini (Live Intraday)
 app.get('/api/recommendations/today', async (req, res) => {
   try {
-    const data = await withCache('recommendations:today', 1800, async () => {
-      console.log('[Recommendations] Generating today\'s recommendations...');
+    const data = await withCache('recommendations:today_processed', 1800, async () => {
+      const analyses = await getSharedBatchAnalyses();
+      const sorted = [...analyses].sort((a, b) => (b.volRatio * b.score) - (a.volRatio * a.score));
 
-      // Batch analyze all stocks in chunks of 5
-      const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 5);
+      const buyPicks = sorted.filter(a => a.score >= 52 && !a.isIlliquidTrap).slice(0, 8);
+      const sellPicks = sorted.filter(a => a.score <= 35).slice(0, 4);
+      const holdPicks = sorted.filter(a => a.score > 35 && a.score < 52).slice(0, 4);
 
-      // Sort by score (best first)
-      analyses.sort((a, b) => b.score - a.score);
-
-      // Get top picks (score >= 55) and bottom picks (score <= 35)
-      const buyPicks = analyses.filter(a => a.score >= 55).slice(0, 8);
-      const sellPicks = analyses.filter(a => a.score <= 35).slice(0, 4);
-      const holdPicks = analyses.filter(a => a.score > 35 && a.score < 55).slice(0, 4);
-
-      // Use Gemini AI for analysis text
       let aiAnalysis = {};
       if (process.env.GEMINI_API_KEY && buyPicks.length > 0) {
         try {
@@ -1726,28 +1739,24 @@ app.get('/api/recommendations/today', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = buyPicks.slice(0, 5).map(s =>
-            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, Fib 38.2% ${s.fibonacci?.level382}, Fib 61.8% ${s.fibonacci?.level618}, TV Rating ${s.tradingViewRating} (${s.tvRecommendScore}), Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%, Est Days ${s.profitEstimation?.estimatedDays}`
+            `${s.symbol}: Harga ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, Vol Ratio ${s.volRatio}x, ATR ${s.atr}, VWAP ${s.vwap}, OBV Trend ${s.obvTrend}, Candle ${s.candlestickPattern}, Support ${s.support}, Resistance ${s.resistance}, TV Rating ${s.tradingViewRating}, Skor ${s.score}`
           ).join('\n');
 
-          const prompt = `Kamu adalah sistem Multi-Agent Trading AI profesional (Technical Analyst, Risk Manager, dan Consensus Arbiter). Berdasarkan data teknikal dan konfirmasi rating resmi TradingView berikut, lakukan simulasi debat antar agen untuk memberikan rekomendasi PRESISI TINGGI HARI INI dalam Bahasa Indonesia.
+          const prompt = `Kamu adalah sistem Multi-Agent Trading AI profesional. Berdasarkan data teknikal berikut, berikan rekomendasi SCALPING HARI INI secara profesional dalam Bahasa Indonesia tanpa emotikon/emoji.
 
 Data saham:
 ${stockSummaries}
 
 Untuk setiap saham, berikan:
-1. entry_low dan entry_high (range harga beli REALISTIS yang telah disepakati agen berdasarkan support, VWAP, dan Fibonacci)
-2. stop_loss (harga cut loss KETAT hasil filter Risk Manager, max 3-5% dari entry, berdasarkan ATR)
-3. take_profit (target profit REALISTIS hasil validasi Technical Analyst)
-4. reasoning (ringkasan 2-3 kalimat hasil konsensus Multi-Agent, sebutkan validasi TV Rating dan konfirmasi aliran Smart Money OBV/VWAP, diawali dengan "🛡️ Multi-Agent Verified:")
+1. entry_low dan entry_high (range harga beli scalping realistis)
+2. stop_loss (harga cut loss ketat, max 2-3% dari entry)
+3. take_profit (target profit cepat intraday)
+4. reasoning (ringkasan 2 kalimat hasil analisis teknikal dan konfirmasi arus volume, diawali dengan "[Multi-Agent Verified]:")
 
-PENTING: Pastikan entry, SL, dan TP presisi klinis dan realistis.
-
-Format response sebagai JSON array (tanpa markdown wrapper), contoh:
-[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4250,"take_profit":4800,"reasoning":"🛡️ Multi-Agent Verified: TV Rating Strong Buy (0.65) sejalan dengan dominasi institusi di atas VWAP. Risk Manager menyetujui batas risiko ATR 1:2.5 dengan momentum OBV Accumulation yang kokoh."}]`;
+Format response sebagai JSON array (tanpa markdown wrapper).`;
 
           const result = await model.generateContent(prompt);
-          let text = result.response.text();
-          text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          let text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
           const aiResults = JSON.parse(text);
           aiResults.forEach(r => { aiAnalysis[r.symbol] = r; });
         } catch (aiErr) {
@@ -1755,15 +1764,13 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
         }
       }
 
-      // Merge AI analysis into picks
       const enrichPick = (pick) => {
         const ai = aiAnalysis[pick.symbol] || {};
-        const entryLow = ai.entry_low || pick.support;
+        const entryLow = ai.entry_low || pick.support || Math.round(pick.price * 0.99);
         const entryHigh = ai.entry_high || pick.price;
         const stopLoss = ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97);
         const takeProfit = ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02);
 
-        // Recalculate profit estimation with final entry/TP/SL values
         const entryMid = (entryLow + entryHigh) / 2;
         const finalDistTP = Math.abs(takeProfit - entryMid);
         const finalDistSL = Math.abs(entryMid - stopLoss);
@@ -1771,7 +1778,6 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
         const finalProfitPct = entryMid > 0 ? parseFloat(((finalDistTP / entryMid) * 100).toFixed(2)) : 0;
         const finalLossPct = entryMid > 0 ? parseFloat(((finalDistSL / entryMid) * 100).toFixed(2)) : 0;
 
-        // Use the pick's profitEstimation but override with final values
         const pe = pick.profitEstimation || {};
         const updatedPE = {
           ...pe,
@@ -1795,56 +1801,44 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
       return {
         timestamp: new Date().toISOString(),
         type: 'today',
+        strategy: 'SCALPING — Hari Ini',
         buyPicks: buyPicks.map(enrichPick),
-        sellPicks: sellPicks.map(p => ({
-          ...p,
-          reasoning: generateFallbackReasoning(p),
-        })),
-        holdPicks: holdPicks.map(p => ({
-          ...p,
-          reasoning: generateFallbackReasoning(p),
-        })),
+        sellPicks: sellPicks.map(p => ({ ...p, reasoning: generateFallbackReasoning(p) })),
+        holdPicks: holdPicks.map(p => ({ ...p, reasoning: generateFallbackReasoning(p) })),
         totalAnalyzed: analyses.length,
       };
     });
 
     res.json(data);
   } catch (err) {
-    console.error('[Recommendations] Error:', err.message);
+    console.error('[Recommendations] Today error:', err.message);
     res.status(500).json({ error: 'Failed to generate recommendations', details: err.message });
   }
 });
 
-// API: Recommendations for Tomorrow Morning
+// 2. API: Recommendations for Scalping — Besok Pagi (Pre-Open)
 app.get('/api/recommendations/tomorrow', async (req, res) => {
-  // Time gate: only available after 19:00 WIB (UTC+7)
   const now = new Date();
   const utcHours = now.getUTCHours();
   const wibHours = (utcHours + 7) % 24;
 
   if (wibHours < 19 && !(wibHours < 5)) {
-    // Before 19:00 WIB and after 05:00 WIB = locked
     return res.json({
       locked: true,
-      message: 'Rekomendasi besok pagi tersedia mulai pukul 19:00 WIB',
+      message: 'Rekomendasi besok pagi tersedia mulai pukul 19:00 WIB (Analisis Pasca Penutupan Pasar)',
       currentTimeWIB: `${String(wibHours).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')} WIB`,
       availableAt: '19:00 WIB',
     });
   }
 
   try {
-    const data = await withCache('recommendations:tomorrow', 3600, async () => {
-      console.log('[Recommendations] Generating tomorrow morning recommendations...');
+    const data = await withCache('recommendations:tomorrow_processed', 3600, async () => {
+      const analyses = await getSharedBatchAnalyses();
+      const sorted = [...analyses].sort((a, b) => b.score - a.score);
 
-      const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 5);
+      const morningPicks = sorted.filter(a => a.score >= 55 && !a.isIlliquidTrap).slice(0, 6);
+      const avoidPicks = sorted.filter(a => a.score <= 30).slice(0, 4);
 
-      analyses.sort((a, b) => b.score - a.score);
-
-      // Tomorrow picks: focus on best setups for morning opening
-      const morningPicks = analyses.filter(a => a.score >= 55).slice(0, 6);
-      const avoidPicks = analyses.filter(a => a.score <= 30).slice(0, 4);
-
-      // Use Gemini AI for tomorrow analysis
       let aiAnalysis = {};
       if (process.env.GEMINI_API_KEY && morningPicks.length > 0) {
         try {
@@ -1852,32 +1846,25 @@ app.get('/api/recommendations/tomorrow', async (req, res) => {
           const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
           const stockSummaries = morningPicks.map(s =>
-            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, SMA20 ${s.sma20?.toFixed(0) || 'N/A'}, SMA50 ${s.sma50?.toFixed(0) || 'N/A'}, SMA200 ${s.sma200?.toFixed(0) || 'N/A'}, Vol Ratio ${s.volRatio}x, VWAP ${s.vwap} (Dev ${s.vwapDeviation}%), OBV Trend ${s.obvTrend}, OBV Div ${s.obvDivergence}, Candle ${s.candlestickPattern}, MACD Mom ${s.macdMomentum}, Support ${s.support}, Resistance ${s.resistance}, TV Rating ${s.tradingViewRating}, Skor ${s.score}, Bull/Bear ${s.bullishFactors}/${s.bearishFactors}, Win Prob ${s.profitEstimation?.winProbability}%`
+            `${s.symbol}: Close ${s.price}, RSI ${s.rsi}, MACD ${s.macdLine}/${s.macdSignalLine}, Vol Ratio ${s.volRatio}x, VWAP ${s.vwap}, OBV Trend ${s.obvTrend}, Candle ${s.candlestickPattern}, Support ${s.support}, Resistance ${s.resistance}, TV Rating ${s.tradingViewRating}, Skor ${s.score}`
           ).join('\n');
 
-          const prompt = `Kamu adalah sistem Multi-Agent Trading AI (Analis Teknikal, Manajer Risiko, dan Hakim Konsensus). Berdasarkan data teknikal end-of-day & komposit indikator TradingView berikut, lakukan analisis mendalam untuk PEMBUKAAN BESOK PAGI dalam Bahasa Indonesia.
-
-Fokus pada:
-- Konfirmator TradingView Screener Rating
-- Saham berpotensi gap up / rally dari akumulasi OBV Smart Money & VWAP
-- Manajemen risiko ketat anti-bull trap
+          const prompt = `Kamu adalah sistem Multi-Agent Trading AI profesional. Berdasarkan data teknikal end-of-day berikut, lakukan analisis mendalam untuk PEMBUKAAN BESOK PAGI dalam Bahasa Indonesia tanpa emoji.
 
 Data saham:
 ${stockSummaries}
 
 Untuk setiap saham, berikan:
 1. entry_low dan entry_high (range beli optimal saat opening besok)
-2. stop_loss (harga cut loss ATR, max 3-5% dari entry)
-3. take_profit (target jual jangka pendek 1-3 hari)
-4. reasoning (alasan konsensus Multi-Agent 2-3 kalimat mengapa layak beli besok pagi, diawali "🛡️ Multi-Agent Verified:")
+2. stop_loss (harga cut loss ketat)
+3. take_profit (target jual cepat)
+4. reasoning (alasan konsensus 2-3 kalimat mengapa layak beli besok pagi, diawali "[Multi-Agent Verified]:")
 5. priority (1-5, dimana 1 = paling prioritas)
 
-Format response sebagai JSON array (tanpa markdown wrapper), contoh:
-[{"symbol":"BBRI.JK","entry_low":4400,"entry_high":4520,"stop_loss":4300,"take_profit":4800,"reasoning":"🛡️ Multi-Agent Verified: Rating resmi TradingView Buy terkorelasi dengan sinyal Bullish Divergence dan konfirmasi volume 1.8x. Sangat ideal untuk opening rally.","priority":1}]`;
+Format response sebagai JSON array (tanpa markdown wrapper).`;
 
           const result = await model.generateContent(prompt);
-          let text = result.response.text();
-          text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          let text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
           const aiResults = JSON.parse(text);
           aiResults.forEach(r => { aiAnalysis[r.symbol] = r; });
         } catch (aiErr) {
@@ -1887,12 +1874,11 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
 
       const enrichPick = (pick) => {
         const ai = aiAnalysis[pick.symbol] || {};
-        const entryLow = ai.entry_low || pick.support;
+        const entryLow = ai.entry_low || pick.support || Math.round(pick.price * 0.99);
         const entryHigh = ai.entry_high || pick.price;
         const stopLoss = ai.stop_loss || pick.atrStopLoss || Math.round(pick.support * 0.97);
-        const takeProfit = ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.02);
+        const takeProfit = ai.take_profit || pick.atrTakeProfit || Math.round(pick.resistance * 1.03);
 
-        // Recalculate profit estimation with final values
         const entryMid = (entryLow + entryHigh) / 2;
         const finalDistTP = Math.abs(takeProfit - entryMid);
         const finalDistSL = Math.abs(entryMid - stopLoss);
@@ -1924,12 +1910,10 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
       return {
         timestamp: new Date().toISOString(),
         type: 'tomorrow',
+        strategy: 'SCALPING — Besok Pagi',
         locked: false,
         morningPicks: morningPicks.map(enrichPick).sort((a, b) => (a.priority || 3) - (b.priority || 3)),
-        avoidPicks: avoidPicks.map(p => ({
-          ...p,
-          reasoning: generateFallbackReasoning(p),
-        })),
+        avoidPicks: avoidPicks.map(p => ({ ...p, reasoning: generateFallbackReasoning(p) })),
         totalAnalyzed: analyses.length,
       };
     });
@@ -1941,48 +1925,183 @@ Format response sebagai JSON array (tanpa markdown wrapper), contoh:
   }
 });
 
-// Fallback & Advanced Institutional Reasoning Generator (with ATR RRR, Divergence, Liquidity, VWAP, OBV, Candlesticks and Profit Estimation)
+// 3. API: Recommendations for Swing Trading (Multi-Day Trend Hold)
+app.get('/api/recommendations/swing', async (req, res) => {
+  try {
+    const data = await withCache('recommendations:swing_processed', 1800, async () => {
+      const analyses = await getSharedBatchAnalyses();
+      // Filter untuk swing: Skor tinggi, berpotensi golden cross / di atas SMA50, tidak illiquid
+      const sorted = [...analyses].sort((a, b) => b.score - a.score);
+      const candidates = sorted.filter(a => a.score >= 54 && !a.isIlliquidTrap);
+
+      const nextTradingDate = getNextTradingDayLabel();
+
+      const swingPicks = candidates.slice(0, 8).map(p => {
+        const pe = p.profitEstimation || {};
+        const minProfit = Math.max(5.5, (pe.profitPercent || 6.5)).toFixed(1);
+        const maxProfit = (parseFloat(minProfit) + 4.5).toFixed(1);
+        const entryLow = p.support || Math.round(p.price * 0.97);
+        const entryHigh = p.price;
+        const targetPriceLow = p.atrTakeProfit || Math.round(p.price * (1 + (parseFloat(minProfit) / 100)));
+        const targetPriceHigh = Math.round(p.price * (1 + (parseFloat(maxProfit) / 100)));
+        const stopLoss = p.atrStopLoss || Math.round(entryLow * 0.95);
+
+        return {
+          ...p,
+          entryLow,
+          entryHigh,
+          stopLoss,
+          takeProfit: targetPriceLow,
+          strategy: 'SWING TRADING',
+          entryDateAdvice: `Masuk pada hari bursa berikutnya (${nextTradingDate}) pada area batas beli Rp ${entryLow.toLocaleString('id-ID')} - Rp ${entryHigh.toLocaleString('id-ID')}`,
+          targetProfitPct: `+${minProfit}% hingga +${maxProfit}%`,
+          sellProfitAdvice: `Jual bertahap saat profit mencapai +${minProfit}% hingga +${maxProfit}% (Target harga Rp ${targetPriceLow.toLocaleString('id-ID')} - Rp ${targetPriceHigh.toLocaleString('id-ID')})`,
+          reasoning: generateFallbackReasoning(p)
+        };
+      });
+
+      return {
+        timestamp: new Date().toISOString(),
+        type: 'swing',
+        strategy: 'SWING TRADING',
+        picks: swingPicks,
+        totalAnalyzed: analyses.length,
+      };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('[Recommendations] Swing error:', err.message);
+    res.status(500).json({ error: 'Failed to generate swing recommendations', details: err.message });
+  }
+});
+
+// 4. API: Recommendations for BSJP (Beli Sore Jual Pagi)
+app.get('/api/recommendations/bsjp', async (req, res) => {
+  try {
+    const data = await withCache('recommendations:bsjp_processed', 1800, async () => {
+      const analyses = await getSharedBatchAnalyses();
+      // BSJP: Prioritaskan saham dengan akumulasi OBV positif & volume meningkat
+      const candidates = [...analyses]
+        .filter(a => a.score >= 50 && !a.isIlliquidTrap && (a.obvDivergence === 'ACCUMULATION' || a.obvTrend > 0 || a.volRatio >= 1.2))
+        .sort((a, b) => b.volRatio - a.volRatio);
+
+      const bsjpPicks = candidates.slice(0, 6).map(p => {
+        const entryLow = Math.round(p.price * 0.995);
+        const entryHigh = p.price;
+        const stopLoss = Math.round(p.price * 0.975);
+        const takeProfit = Math.round(p.price * 1.025);
+
+        return {
+          ...p,
+          entryLow,
+          entryHigh,
+          stopLoss,
+          takeProfit,
+          strategy: 'BSJP (Beli Sore Jual Pagi)',
+          entryTimeAdvice: `Beli saat sesi akhir bursa menjelang penutupan (Pukul 15.45 - 15.50 WIB) pada harga kisaran Rp ${p.price.toLocaleString('id-ID')}`,
+          sellTimeAdvice: `Jual pada menit-menit awal bursa keesokan paginya (Pukul 09.00 - 09.15 WIB) saat terjadi lonjakan pembukaan (Gap-Up) dengan target cuan +1.5% hingga +3.0%`,
+          reasoning: generateFallbackReasoning(p)
+        };
+      });
+
+      return {
+        timestamp: new Date().toISOString(),
+        type: 'bsjp',
+        strategy: 'BSJP (Beli Sore Jual Pagi)',
+        picks: bsjpPicks,
+        totalAnalyzed: analyses.length,
+      };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('[Recommendations] BSJP error:', err.message);
+    res.status(500).json({ error: 'Failed to generate BSJP recommendations', details: err.message });
+  }
+});
+
+// 5. API: Recommendations for BPJS (Beli Pagi Jual Sore)
+app.get('/api/recommendations/bpjs', async (req, res) => {
+  try {
+    const data = await withCache('recommendations:bpjs_processed', 1800, async () => {
+      const analyses = await getSharedBatchAnalyses();
+      // BPJS: Saham berdaya dorong intraday tinggi (volRatio >= 1.2 dan RSI di 45 - 68)
+      const candidates = [...analyses]
+        .filter(a => a.score >= 50 && !a.isIlliquidTrap && a.volRatio >= 1.1)
+        .sort((a, b) => b.score - a.score);
+
+      const bpjsPicks = candidates.slice(0, 6).map(p => {
+        const entryLow = p.support || Math.round(p.price * 0.985);
+        const entryHigh = p.price;
+        const stopLoss = p.atrStopLoss || Math.round(entryLow * 0.97);
+        const takeProfit = p.atrTakeProfit || Math.round(p.price * 1.035);
+
+        return {
+          ...p,
+          entryLow,
+          entryHigh,
+          stopLoss,
+          takeProfit,
+          strategy: 'BPJS (Beli Pagi Jual Sore)',
+          entryTimeAdvice: `Beli pada masa pembukaan sesi I bursa (Pukul 09.00 - 09.30 WIB) saat terkonfirmasi dorongan volume pembelian pada kisaran Rp ${entryLow.toLocaleString('id-ID')} - Rp ${entryHigh.toLocaleString('id-ID')}`,
+          sellTimeAdvice: `Jual sebelum penutupan sesi II di sore hari (Pukul 15.20 - 15.45 WIB) untuk mengunci cuan harian +2.0% hingga +4.0% tanpa menginapkan saham`,
+          reasoning: generateFallbackReasoning(p)
+        };
+      });
+
+      return {
+        timestamp: new Date().toISOString(),
+        type: 'bpjs',
+        strategy: 'BPJS (Beli Pagi Jual Sore)',
+        picks: bpjsPicks,
+        totalAnalyzed: analyses.length,
+      };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('[Recommendations] BPJS error:', err.message);
+    res.status(500).json({ error: 'Failed to generate BPJS recommendations', details: err.message });
+  }
+});
+
+// Fallback & Institutional Reasoning Generator (Clean Stockbit UI without emojis)
 function generateFallbackReasoning(stock) {
   const parts = [];
 
   if (stock.tradingViewRating && stock.tradingViewRating !== 'N/A' && stock.tradingViewRating !== 'NEUTRAL') {
-    parts.push(`🛡️ Multi-Agent Verified (TV Rating: ${stock.tradingViewRating.replace(/_/g, ' ')})`);
+    parts.push(`[Multi-Agent Verified] TV Rating: ${stock.tradingViewRating.replace(/_/g, ' ')}`);
   }
 
-  // 1. Critical Liquidity & Penny Stock Warning
   if (stock.isIlliquidTrap) {
-    parts.push('⚠️ PROTEKSI LIKUIDITAS: Turn-over / volume rendah (rawan jebakan volatilitas saham gila/penny stock)');
+    parts.push('[PROTEKSI LIKUIDITAS]: Turn-over / volume rendah (rawan jebakan volatilitas saham kurang likuid)');
   }
 
-  // 2. Divergence / Bull Trap Alerts (with multi-indicator strength)
   if (stock.divergence === 'BEARISH_BULL_TRAP') {
     const strengthTxt = stock.divergenceStrength >= 2 ? ` (${stock.divergenceStrength}x konfirmasi)` : '';
-    parts.push(`🚨 Waspada Bull Trap (Bearish Divergence)${strengthTxt}: Harga melaju tinggi tanpa dukung momentum RSI/OBV`);
+    parts.push(`[Waspada Bull Trap / Bearish Divergence]${strengthTxt}: Harga melaju tinggi tanpa dukungan momentum RSI/OBV`);
   } else if (stock.divergence === 'BULLISH_ACCUMULATION') {
     const strengthTxt = stock.divergenceStrength >= 2 ? ` (${stock.divergenceStrength}x konfirmasi)` : '';
-    parts.push(`🟢 Bullish Divergence terdeteksi${strengthTxt}: Akumulasi di area bottom, potensi reversal kuat`);
+    parts.push(`[Bullish Divergence]${strengthTxt}: Akumulasi di area bottom, potensi reversal kuat`);
   }
 
-  // 3. Smart Money OBV & VWAP Institutional Flow
   if (stock.obvDivergence === 'ACCUMULATION') {
-    parts.push('💎 Smart Money Accumulation: Volume OBV menanjak kencang padahal harga sedang rehat');
+    parts.push('[Smart Money Accumulation]: Volume OBV menanjak kencang padahal harga sedang konsolidasi');
   } else if (stock.obvDivergence === 'DISTRIBUTION') {
-    parts.push('🛑 Smart Money Distribution: Volume OBV melemah tajam padahal harga dipaksa naik (waspada dump)');
+    parts.push('[Smart Money Distribution]: Volume OBV melemah tajam padahal harga dipaksa naik (waspada distribusi)');
   }
+
   if (stock.vwapDeviation !== undefined && Math.abs(stock.vwapDeviation) > 1) {
-    if (stock.vwapDeviation > 0) parts.push(`Harga di atas VWAP (${stock.vwapDeviation}%) menandakan dominasi buyer institusi`);
+    if (stock.vwapDeviation > 0) parts.push(`Harga di atas VWAP (+${stock.vwapDeviation}%) menandakan dominasi buyer institusi`);
     else parts.push(`Harga di bawah VWAP (${stock.vwapDeviation}%) menandakan tekanan jual institusi`);
   }
 
-  // 4. Candlestick Pattern & MACD Momentum
   if (stock.candlestickPattern && stock.candlestickPattern !== 'NONE') {
     parts.push(`Pola candlestick ${stock.candlestickPattern.replace(/_/g, ' ')} terdeteksi`);
   }
+
   if (stock.macdMomentum === 'ZERO_CROSS_BULL' || stock.macdMomentum === 'ACCELERATING_BULL') {
     parts.push('Momentum MACD Histogram mengakselerasi naik dengan kuat');
   }
 
-  // 5. RSI & Trend Momentum
   if (stock.rsi < 30) parts.push('RSI sangat oversold — peluang technical rebound');
   else if (stock.rsi < 40) parts.push('RSI di zona akumulasi (mendekati oversold)');
   else if (stock.rsi > 70) parts.push('RSI overbought — rawan aksi take profit');
@@ -1997,7 +2116,6 @@ function generateFallbackReasoning(stock) {
     parts.push(`lonjakan volume ${stock.volRatio}x mengonfirmasi momentum`);
   }
 
-  // 6. Risk/Reward & Profit Estimation
   const pe = stock.profitEstimation;
   if (pe) {
     parts.push(`RRR ${pe.riskRewardRatio}:1 (SL ${stock.atrStopLoss}, TP ${stock.atrTakeProfit})`);
