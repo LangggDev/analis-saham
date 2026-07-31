@@ -173,6 +173,7 @@ async function yahooAuthFetch(baseUrl) {
 
 // ─── In-Memory Cache ────────────────────────────────────────────────────────
 const cache = new Map();
+const inFlight = new Map();
 
 function withCache(key, ttlSeconds, fetchFn) {
   const now = Date.now();
@@ -180,22 +181,32 @@ function withCache(key, ttlSeconds, fetchFn) {
   if (cached && now - cached.timestamp < ttlSeconds * 1000) {
     return Promise.resolve(cached.data);
   }
-  return fetchFn().then((data) => {
-    cache.set(key, { data, timestamp: now });
+  // Mencegah duplicate processing: jika cache sedang dihitung (in-flight), tunggu promise yang sama
+  if (inFlight.has(key)) {
+    return inFlight.get(key);
+  }
+  const promise = fetchFn().then((data) => {
+    cache.set(key, { data, timestamp: Date.now() });
+    inFlight.delete(key);
     return data;
+  }).catch((err) => {
+    inFlight.delete(key);
+    throw err;
   });
+  inFlight.set(key, promise);
+  return promise;
 }
 
 // Prune expired entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of cache) {
-    if (now - entry.timestamp > 10 * 60 * 1000) cache.delete(key);
+    if (now - entry.timestamp > 30 * 60 * 1000) cache.delete(key); // Perpanjang usia simpan cadangan menjadi 30 menit
   }
 }, 5 * 60 * 1000);
 
 // ─── Rate Limiting / Throttle ───────────────────────────────────────────────
-const MAX_CONCURRENT = 4;
+const MAX_CONCURRENT = 12; // Ditingkatkan agar scan paralel 300 saham jauh lebih cepat
 let activeCalls = 0;
 const waitQueue = [];
 
@@ -1685,7 +1696,7 @@ async function fetchTradingViewRatings() {
 }
 
 // Helper: Run parallel batch tasks with TradingView rating validation
-async function analyzeBatch(symbols, batchSize = 5) {
+async function analyzeBatch(symbols, batchSize = 20) {
   const tvRatingsMap = await fetchTradingViewRatings();
   const results = [];
   for (let i = 0; i < symbols.length; i += batchSize) {
@@ -1695,7 +1706,7 @@ async function analyzeBatch(symbols, batchSize = 5) {
     );
     chunkResults.forEach(r => { if (r) results.push(r); });
     if (i + batchSize < symbols.length) {
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 100)); // Dipersingkat agar tidak membuang waktu
     }
   }
   return results;
@@ -1705,10 +1716,16 @@ async function analyzeBatch(symbols, batchSize = 5) {
 async function getSharedBatchAnalyses() {
   return await withCache('recommendations:raw_batch', 1800, async () => {
     console.log('[Recommendations] Computing master batch analyses for all strategies...');
-    const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 5);
+    const analyses = await analyzeBatch(RECOMMENDATION_SYMBOLS, 20);
     return analyses;
   });
 }
+
+// Warm-up cache otomatis secara latar belakang setelah server aktif
+setTimeout(() => {
+  console.log('[Recommendations] Memulai warm-up analisis saham otomatis di background...');
+  getSharedBatchAnalyses().catch(err => console.error('[Recommendations Warmup Error]', err.message));
+}, 4000);
 
 function getNextTradingDayLabel() {
   const d = new Date();

@@ -108,14 +108,20 @@ const StockRecommendation = {
 
     // ─── Compatibility methods for app.js ──────────────────────────────
     async loadToday(forceRefresh = false) {
-        this.fetchData('today', forceRefresh);
-        this.fetchData('swing', forceRefresh);
-        this.fetchData('bsjp', forceRefresh);
-        this.fetchData('bpjs', forceRefresh);
+        const currentKey = this._getActiveDataKey();
+        this.fetchData(currentKey, forceRefresh);
+
+        // Prefetch strategi lain secara perlahan di belakang agar tab aktif dimuat sekejap tanpa antrean network
+        setTimeout(() => {
+            const others = ['today', 'swing', 'bsjp', 'bpjs'].filter(k => k !== currentKey);
+            others.forEach(k => this.fetchData(k, forceRefresh));
+        }, 800);
     },
 
     async loadTomorrow(forceRefresh = false) {
-        this.fetchData('tomorrow', forceRefresh);
+        setTimeout(() => {
+            this.fetchData('tomorrow', forceRefresh);
+        }, 1200);
     },
 
     startAutoRefresh() {
