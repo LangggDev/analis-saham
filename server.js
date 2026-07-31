@@ -266,50 +266,128 @@ async function fetchChartData(symbol, interval = '1d', range = '6mo') {
   return chartResult;
 }
 
-// ─── API: Quote ─────────────────────────────────────────────────────────────
-// Extracts real-time quote from chart endpoint meta data (no auth needed)
+// ─── Helper: Fetch Real-Time Quote from TradingView Screener API ─────────────
+async function fetchTradingViewQuote(ticker) {
+  try {
+    const baseTicker = ticker.replace(/\.JK$/i, '').toUpperCase();
+    const tvRes = await fetch('https://scanner.tradingview.com/indonesia/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symbols: { tickers: [`IDX:${baseTicker}`] },
+        columns: ['close', 'change', 'change_abs', 'volume', 'description', 'high', 'low', 'open', 'Pre-market.change', 'Post-market.change']
+      })
+    });
+    if (!tvRes.ok) return null;
+    const json = await tvRes.json();
+    const row = json?.data?.[0]?.d;
+    if (!row || !row[0]) return null;
+    return {
+      price: parseFloat(row[0]),
+      changePercent: parseFloat(row[1]),
+      change: parseFloat(row[2]),
+      volume: parseInt(row[3]) || 0,
+      name: row[4] || baseTicker,
+      dayHigh: parseFloat(row[5]) || parseFloat(row[0]),
+      dayLow: parseFloat(row[6]) || parseFloat(row[0]),
+      open: parseFloat(row[7]) || parseFloat(row[0])
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+// ─── API: Quote (Dual-Engine: Yahoo Finance + TradingView Screener API) ──────
 app.get('/api/quote/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
-    const data = await withCache(`quote:${symbol}`, 10, () =>
-      yahooCall(async () => {
-        const chart = await fetchChartData(symbol, '1d', '5d');
-        const meta = chart.meta;
-        const closes = (chart.indicators?.quote?.[0]?.close || []).filter(c => c != null);
+    const data = await withCache(`quote:${symbol}`, 10, async () => {
+      // Ambil secara paralel dari TradingView Screener dan Yahoo Finance
+      const [tvQuote, yahooQuote] = await Promise.all([
+        fetchTradingViewQuote(symbol),
+        yahooCall(async () => {
+          const chart = await fetchChartData(symbol, '1m', '5d').catch(() => fetchChartData(symbol, '1d', '5d'));
+          const meta = chart.meta;
+          const closes = (chart.indicators?.quote?.[0]?.close || []).filter(c => c != null);
 
-        let price = meta.regularMarketPrice ?? 0;
-        let previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+          let price = meta.regularMarketPrice ?? 0;
+          let previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
 
-        if (closes.length >= 2) {
-          price = closes[closes.length - 1];
-          previousClose = closes[closes.length - 2];
-        } else if (closes.length === 1) {
-          price = closes[0];
+          if (!price || price === 0) {
+            if (closes.length >= 2) {
+              price = closes[closes.length - 1];
+            } else if (closes.length === 1) {
+              price = closes[0];
+            }
+          }
+          if (!previousClose || previousClose === 0) {
+            if (closes.length >= 2) {
+              previousClose = closes[closes.length - 2];
+            }
+          }
+
+          const change = price - previousClose;
+          const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
+
+          return {
+            symbol: meta.symbol || symbol,
+            name: meta.shortName || meta.longName || symbol,
+            price,
+            change,
+            changePercent,
+            volume: meta.regularMarketVolume ?? 0,
+            marketCap: meta.marketCap ?? null,
+            dayHigh: meta.regularMarketDayHigh ?? 0,
+            dayLow: meta.regularMarketDayLow ?? 0,
+            open: meta.regularMarketOpen ?? 0,
+            previousClose,
+            fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? 0,
+            fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? 0,
+            currency: meta.currency || '',
+            exchange: meta.exchangeName || meta.fullExchangeName || '',
+            marketState: meta.marketState || 'UNKNOWN',
+          };
+        }).catch(() => null)
+      ]);
+
+      // Gabungkan data: Pilih data dengan volume paling update/tinggi atau harga terkini dari TradingView
+      if (yahooQuote && tvQuote) {
+        if (tvQuote.volume >= yahooQuote.volume || tvQuote.price !== yahooQuote.price) {
+          return {
+            ...yahooQuote,
+            price: tvQuote.price || yahooQuote.price,
+            change: tvQuote.change || yahooQuote.change,
+            changePercent: tvQuote.changePercent || yahooQuote.changePercent,
+            volume: Math.max(tvQuote.volume, yahooQuote.volume),
+            dayHigh: Math.max(tvQuote.dayHigh, yahooQuote.dayHigh),
+            dayLow: Math.min(tvQuote.dayLow || Infinity, yahooQuote.dayLow || Infinity) !== Infinity ? Math.min(tvQuote.dayLow, yahooQuote.dayLow) : yahooQuote.dayLow,
+            open: tvQuote.open || yahooQuote.open,
+            source: 'TradingView + Yahoo Dual-Engine'
+          };
         }
-
-        const change = price - previousClose;
-        const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
-
+        return { ...yahooQuote, source: 'Yahoo + TradingView Verified' };
+      }
+      if (tvQuote && (!yahooQuote || !yahooQuote.price)) {
         return {
-          symbol: meta.symbol || symbol,
-          name: meta.shortName || meta.longName || symbol,
-          price,
-          change,
-          changePercent,
-          volume: meta.regularMarketVolume ?? 0,
-          marketCap: meta.marketCap ?? null,
-          dayHigh: meta.regularMarketDayHigh ?? 0,
-          dayLow: meta.regularMarketDayLow ?? 0,
-          open: meta.regularMarketOpen ?? 0,
-          previousClose,
-          fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ?? 0,
-          fiftyTwoWeekLow: meta.fiftyTwoWeekLow ?? 0,
-          currency: meta.currency || '',
-          exchange: meta.exchangeName || meta.fullExchangeName || '',
-          marketState: meta.marketState || 'UNKNOWN',
+          symbol,
+          name: tvQuote.name,
+          price: tvQuote.price,
+          change: tvQuote.change,
+          changePercent: tvQuote.changePercent,
+          volume: tvQuote.volume,
+          dayHigh: tvQuote.dayHigh,
+          dayLow: tvQuote.dayLow,
+          open: tvQuote.open,
+          previousClose: tvQuote.price - tvQuote.change,
+          currency: 'IDR',
+          exchange: 'JKT',
+          marketState: 'REGULAR',
+          source: 'TradingView Live Screener API'
         };
-      })
-    );
+      }
+      if (yahooQuote) return yahooQuote;
+      throw new Error(`Data tidak ditemukan untuk ${symbol}`);
+    });
     res.json(data);
   } catch (err) {
     console.error(`Error fetching quote for ${symbol}:`, err.message);
@@ -942,11 +1020,17 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
         const closes = (chart.indicators?.quote?.[0]?.close || []).filter(c => c != null);
         let price = meta.regularMarketPrice ?? 0;
         let previousClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
-        if (closes.length >= 2) {
-          price = closes[closes.length - 1];
-          previousClose = closes[closes.length - 2];
-        } else if (closes.length === 1) {
-          price = closes[0];
+        if (!price || price === 0) {
+          if (closes.length >= 2) {
+            price = closes[closes.length - 1];
+          } else if (closes.length === 1) {
+            price = closes[0];
+          }
+        }
+        if (!previousClose || previousClose === 0) {
+          if (closes.length >= 2) {
+            previousClose = closes[closes.length - 2];
+          }
         }
         const change = price - previousClose;
         const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
