@@ -2164,6 +2164,50 @@ app.get('/api/recommendations/bpjs', async (req, res) => {
   }
 });
 
+// 6. API: Recommendations for BSIJ (Beli Siang Jual Sore — Sesi II Momentum)
+app.get('/api/recommendations/bsij', async (req, res) => {
+  try {
+    const data = await withCache('recommendations:bsij_processed', 1800, async () => {
+      const analyses = await getSharedBatchAnalyses();
+      // BSIJ: Saham dengan akumulasi positif di Sesi I & momentum berkelanjutan ke Sesi II (RSI stabil, volRatio >= 1.1)
+      const candidates = [...analyses]
+        .filter(a => a.score >= 50 && !a.isIlliquidTrap && a.volRatio >= 1.1 && (a.obvDivergence === 'ACCUMULATION' || a.obvTrend > 0 || a.changePercent > 0))
+        .sort((a, b) => (b.volRatio * b.score) - (a.volRatio * a.score));
+
+      const bsijPicks = candidates.slice(0, 6).map(p => {
+        const entryLow = Math.round(p.price * 0.99);
+        const entryHigh = p.price;
+        const stopLoss = Math.round(entryLow * 0.975);
+        const takeProfit = Math.round(p.price * 1.025);
+
+        return {
+          ...p,
+          entryLow,
+          entryHigh,
+          stopLoss,
+          takeProfit,
+          strategy: 'BSIJ (Beli Siang Jual Sore)',
+          entryTimeAdvice: `Beli saat jeda sesi siang / pembukaan Sesi II (Pukul 13.30 - 13.45 WIB) pada kisaran Rp ${entryLow.toLocaleString('id-ID')} - Rp ${entryHigh.toLocaleString('id-ID')}`,
+          sellTimeAdvice: `Jual sebelum bursa tutup sore ini (Pukul 15.20 - 15.45 WIB) untuk memanfaatkan kelanjutan momentum Sesi II dengan target cuan +1.5% hingga +3.0%`,
+          reasoning: generateFallbackReasoning(p)
+        };
+      });
+
+      return {
+        timestamp: new Date().toISOString(),
+        type: 'bsij',
+        strategy: 'BSIJ (Beli Siang Jual Sore)',
+        picks: bsijPicks,
+        totalAnalyzed: analyses.length,
+      };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('[Recommendations] BSIJ error:', err.message);
+    res.status(500).json({ error: 'Failed to generate BSIJ recommendations', details: err.message });
+  }
+});
+
 // Fallback & Institutional Reasoning Generator (Clean Stockbit UI without emojis)
 function generateFallbackReasoning(stock) {
   const parts = [];

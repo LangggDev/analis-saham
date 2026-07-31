@@ -15,14 +15,16 @@ const StockRecommendation = {
         tomorrow: null,
         swing: null,
         bsjp: null,
-        bpjs: null
+        bpjs: null,
+        bsij: null
     },
     _isLoading: {
         today: false,
         tomorrow: false,
         swing: false,
         bsjp: false,
-        bpjs: false
+        bpjs: false,
+        bsij: false
     },
     _refreshInterval: null,
     _countdownInterval: null,
@@ -94,6 +96,10 @@ const StockRecommendation = {
             if (subNav) subNav.style.display = 'none';
             if (bannerTitle) bannerTitle.textContent = 'BPJS — Beli Pagi Jual Sore';
             if (bannerDesc) bannerDesc.textContent = 'Trading intraday murni tanpa menginap. Beli saat konfirmasi lonjakan volume pagi hari dan jual sebelum penutupan sesi II di sore hari.';
+        } else if (this._currentStrategy === 'bsij') {
+            if (subNav) subNav.style.display = 'none';
+            if (bannerTitle) bannerTitle.textContent = 'BSIJ — Beli Siang Jual Sore (Sesi II Momentum)';
+            if (bannerDesc) bannerDesc.textContent = 'Analisis akumulasi volume sesi I untuk eksekusi beli saat jeda siang / awal pembukaan sesi II (13.30 WIB), lalu take profit sebelum bursa tutup sore hari.';
         }
 
         this.renderCurrentView();
@@ -103,7 +109,7 @@ const StockRecommendation = {
         if (this._currentStrategy === 'scalping') {
             return this._scalpingSub; // 'today' or 'tomorrow'
         }
-        return this._currentStrategy; // 'swing', 'bsjp', or 'bpjs'
+        return this._currentStrategy; // 'swing', 'bsjp', 'bpjs', or 'bsij'
     },
 
     // ─── Compatibility methods for app.js ──────────────────────────────
@@ -113,7 +119,7 @@ const StockRecommendation = {
 
         // Prefetch strategi lain secara perlahan di belakang agar tab aktif dimuat sekejap tanpa antrean network
         setTimeout(() => {
-            const others = ['today', 'swing', 'bsjp', 'bpjs'].filter(k => k !== currentKey);
+            const others = ['today', 'swing', 'bsjp', 'bpjs', 'bsij'].filter(k => k !== currentKey);
             others.forEach(k => this.fetchData(k, forceRefresh));
         }, 800);
     },
@@ -279,6 +285,12 @@ const StockRecommendation = {
         } else if (key === 'bpjs') {
             picks = data.picks || [];
             sectionTitle = `Saham Pilihan Beli Pagi Jual Sore (${picks.length})`;
+            if (picks.length > 0) {
+                html += this._renderCardsSection(sectionTitle, 'rec-buy-title', picks, key);
+            }
+        } else if (key === 'bsij') {
+            picks = data.picks || [];
+            sectionTitle = `Saham Pilihan Beli Siang Jual Sore (${picks.length})`;
             if (picks.length > 0) {
                 html += this._renderCardsSection(sectionTitle, 'rec-buy-title', picks, key);
             }
@@ -482,6 +494,18 @@ const StockRecommendation = {
                 <div class="rec-guidance-row">
                     <svg class="rec-guidance-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                     <span class="rec-guidance-text"><span class="rec-guidance-label">Waktu Jual:</span> ${pick.sellTimeAdvice || 'Jual sebelum penutupan sesi II di sore hari (Pukul 15.20 - 15.45 WIB)'}</span>
+                </div>
+            </div>`;
+        } else if (strategyKey === 'bsij') {
+            guidanceBoxHTML = `
+            <div class="rec-guidance-box">
+                <div class="rec-guidance-row">
+                    <svg class="rec-guidance-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span class="rec-guidance-text"><span class="rec-guidance-label">Waktu Beli:</span> ${pick.entryTimeAdvice || 'Beli saat jeda siang / pembukaan Sesi II (Pukul 13.30 - 13.45 WIB)'}</span>
+                </div>
+                <div class="rec-guidance-row">
+                    <svg class="rec-guidance-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    <span class="rec-guidance-text"><span class="rec-guidance-label">Waktu Jual:</span> ${pick.sellTimeAdvice || 'Jual sebelum bursa tutup sore ini (Pukul 15.20 - 15.45 WIB) dengan target cuan +1.5% - +3.0%'}</span>
                 </div>
             </div>`;
         }
