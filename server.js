@@ -2892,18 +2892,34 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
     let worstLoss = 0;
     let totalInvested = 0; // estimasi posisi aktif/terbuka (BUY - SELL qty)
     
-    // Group per symbol to check holdings
+    // Group per symbol to check holdings in chronological order (oldest to newest)
     const holdings = {};
+    const chronologicalTx = [...txRes.rows].reverse();
 
-    txRes.rows.forEach(tx => {
+    chronologicalTx.forEach(tx => {
       const sym = tx.symbol;
-      if (!holdings[sym]) holdings[sym] = { qty: 0, cost: 0 };
+      if (!holdings[sym]) holdings[sym] = { qty: 0, cost: 0, avgPrice: 0 };
 
       if (tx.type === 'BUY') {
         holdings[sym].qty += Number(tx.quantity);
         holdings[sym].cost += Number(tx.total_value);
+        if (holdings[sym].qty > 0) {
+          holdings[sym].avgPrice = Math.round(holdings[sym].cost / holdings[sym].qty);
+        }
       } else if (tx.type === 'SELL') {
-        holdings[sym].qty = Math.max(0, holdings[sym].qty - Number(tx.quantity));
+        const soldQty = Number(tx.quantity);
+        const currentQty = holdings[sym].qty;
+        if (currentQty > 0) {
+          const costReduction = (holdings[sym].cost / currentQty) * Math.min(soldQty, currentQty);
+          holdings[sym].cost = Math.max(0, holdings[sym].cost - costReduction);
+        }
+        holdings[sym].qty = Math.max(0, holdings[sym].qty - soldQty);
+        if (holdings[sym].qty === 0) {
+          holdings[sym].cost = 0;
+          holdings[sym].avgPrice = 0;
+        } else {
+          holdings[sym].avgPrice = Math.round(holdings[sym].cost / holdings[sym].qty);
+        }
         totalSellTrades++;
         const pnl = Number(tx.pnl || 0);
         realizedPnL += pnl;

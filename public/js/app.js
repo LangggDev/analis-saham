@@ -917,9 +917,21 @@ class WatchlistManager {
         if (!this._container) return;
         this._container.innerHTML = '';
 
-        this.symbols.forEach(sym => {
+        const activeHoldings = window.JournalManager?.activeHoldings || JSON.parse(localStorage.getItem('stockpulse_active_holdings') || '{}');
+
+        // Prioritaskan saham yang dibeli / dipunyai agar berada di posisi paling atas Watchlist!
+        const sortedSymbols = [...this.symbols].sort((a, b) => {
+            const aHolding = !!(activeHoldings[a] && activeHoldings[a].qty > 0);
+            const bHolding = !!(activeHoldings[b] && activeHoldings[b].qty > 0);
+            if (aHolding && !bHolding) return -1;
+            if (!aHolding && bHolding) return 1;
+            return 0;
+        });
+
+        sortedSymbols.forEach(sym => {
             const item = document.createElement('div');
-            item.className = 'watchlist-item';
+            const isHolding = !!(activeHoldings[sym] && activeHoldings[sym].qty > 0);
+            item.className = 'watchlist-item' + (isHolding ? ' is-portfolio-item' : '') + (sym === (window.app?.currentSymbol) ? ' active' : '');
             item.dataset.symbol = sym;
 
             const cached = this._priceCache[sym];
@@ -932,9 +944,11 @@ class WatchlistManager {
                 ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`
                 : '';
 
+            const badgeHtml = isHolding ? `<span class="watchlist-badge-portfolio" title="Saham Dibeli / Dipunyai di Portofolio">📌 PORTFOLIO</span>` : '';
+
             item.innerHTML = `
                 <div class="watchlist-item-info">
-                    <span class="watchlist-symbol">${sym}</span>
+                    <span class="watchlist-symbol">${sym} ${badgeHtml}</span>
                     <span class="watchlist-price">${price}</span>
                 </div>
                 <div class="watchlist-item-actions">
@@ -1100,6 +1114,18 @@ class App {
             });
         }
 
+        // AUTO-MONITORING: Jika ada saham yang dibeli / dimiliki di portofolio, utamakan langsung tampil di chart saat pertama dibuka!
+        try {
+            const savedHoldings = JSON.parse(localStorage.getItem('stockpulse_active_holdings') || '{}');
+            const holdingSymbols = Object.keys(savedHoldings).filter(s => savedHoldings[s]?.qty > 0);
+            if (holdingSymbols.length > 0) {
+                this.currentSymbol = holdingSymbols[0];
+                console.log('[Auto-Monitor]: Memuat saham portofolio aktif pertama saat startup:', this.currentSymbol);
+            }
+        } catch(e) { /* fallback ke default */ }
+
+        window.updateQuickMonitoringBar = () => this._updateQuickMonitoringBar();
+
         // Initial load
         await this.loadSymbol(this.currentSymbol);
 
@@ -1188,6 +1214,7 @@ class App {
 
             // Update quote panel
             this.updateQuotePanel(quote);
+            this._updateQuickMonitoringBar();
 
             // Auto-fill target price
             const poPrice = document.getElementById('poPrice');
@@ -1216,6 +1243,55 @@ class App {
         } catch (err) {
             console.error('loadSymbol error:', err);
             this._showError(`Gagal memuat data untuk ${symbol}`);
+        }
+    }
+
+    _updateQuickMonitoringBar() {
+        const bar = document.getElementById('quickMonitoringBar');
+        if (!bar) return;
+        const sym = this.currentSymbol;
+        const activeHoldings = window.JournalManager?.activeHoldings || JSON.parse(localStorage.getItem('stockpulse_active_holdings') || '{}');
+        const pos = activeHoldings[sym];
+        const price = this.watchlist?._priceCache?.[sym]?.price || '';
+
+        if (pos && pos.qty > 0) {
+            const lots = Math.floor(pos.qty / 100);
+            bar.innerHTML = `
+                <div class="monitoring-bar-content in-portfolio">
+                    <div class="mon-status">
+                        <span class="mon-pulse"></span>
+                        <span class="mon-tag">📌 POSISI AKTIF PORTOFOLIO:</span>
+                        <strong class="mon-lots">${lots} Lot <small>(${pos.qty.toLocaleString('id-ID')} lbr)</small></strong>
+                        <span class="mon-avg">Avg Beli: Rp ${pos.avgPrice?.toLocaleString('id-ID') || 0}</span>
+                    </div>
+                    <div class="mon-actions">
+                        <button class="btn-mon-action btn-sell-eval" onclick="JournalManager.showAddTradeModal('${sym}', '${price || pos.avgPrice}', 'SELL', '${pos.qty}')">
+                            💰 Jual & Evaluasi P&L
+                        </button>
+                        <button class="btn-mon-action btn-add-buy" onclick="JournalManager.showAddTradeModal('${sym}', '${price || pos.avgPrice}', 'BUY')">
+                            ➕ Beli Tambahan
+                        </button>
+                        <button class="btn-mon-action btn-to-journal" onclick="window.app?._switchTab('journal')">
+                            ➔ Buka Jurnal & Evaluasi
+                        </button>
+                    </div>
+                </div>
+            `;
+            bar.style.display = 'block';
+        } else {
+            bar.innerHTML = `
+                <div class="monitoring-bar-content no-portfolio">
+                    <div class="mon-status">
+                        <span class="mon-tag-grey">Saham Ini Belum Ada di Portofolio Anda</span>
+                    </div>
+                    <div class="mon-actions">
+                        <button class="btn-mon-action btn-add-buy-neon" onclick="JournalManager.showAddTradeModal('${sym}', '${price}', 'BUY')">
+                            📝 Catat Pembelian di Jurnal
+                        </button>
+                    </div>
+                </div>
+            `;
+            bar.style.display = 'block';
         }
     }
 

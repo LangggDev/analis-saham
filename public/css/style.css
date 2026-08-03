@@ -6689,4 +6689,405 @@ body {
   width: 15px;
   height: 15px;
   cursor: pointer;
-}
+}
+
+/* ─── Watchlist Portfolio Pinning & Badging ────────────────────────────── */
+.watchlist-item.is-portfolio-item {
+  background: linear-gradient(90deg, rgba(0, 230, 118, 0.08), rgba(255, 255, 255, 0.01));
+  border-left: 3px solid #00e676;
+}
+
+.watchlist-badge-portfolio {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #00e676;
+  background: rgba(0, 230, 118, 0.15);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px rgba(0, 230, 118, 0.4);
+}
+
+/* ─── Quick Monitoring & Action Bar (Symbol Header) ────────────────────── */
+.quick-monitoring-bar {
+  margin: 10px 0 16px 0;
+  padding: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.monitoring-bar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.monitoring-bar-content.in-portfolio {
+  background: linear-gradient(135deg, rgba(16, 30, 25, 0.9), rgba(13, 20, 36, 0.9));
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 230, 118, 0.08);
+}
+
+.monitoring-bar-content.no-portfolio {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.mon-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  flex-wrap: wrap;
+}
+
+.mon-pulse {
+  width: 9px;
+  height: 9px;
+  background-color: #00e676;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #00e676;
+  animation: pulse 1.5s infinite;
+}
+
+.mon-tag {
+  font-weight: 700;
+  color: #00e676;
+}
+
+.mon-lots {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mon-avg {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.mon-tag-grey {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+.mon-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-mon-action {
+  padding: 6px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-mon-action:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-sell-eval {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #f43f5e;
+}
+.btn-sell-eval:hover {
+  background: rgba(244, 63, 94, 0.25);
+  color: #fff;
+}
+
+.btn-add-buy {
+  background: rgba(0, 185, 114, 0.15);
+  border-color: rgba(0, 185, 114, 0.4);
+  color: #00b972;
+}
+.btn-add-buy:hover {
+  background: rgba(0, 185, 114, 0.25);
+  color: #fff;
+}
+
+.btn-add-buy-neon {
+  background: rgba(0, 176, 255, 0.12);
+  border: 1px solid rgba(0, 176, 255, 0.35);
+  color: #00b0ff;
+}
+.btn-add-buy-neon:hover {
+  background: rgba(0, 176, 255, 0.25);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(0, 176, 255, 0.25);
+}
+
+.btn-to-journal {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+.btn-to-journal:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Active Portfolio Live Monitoring Section (Journal Tab) ───────────── */
+.active-portfolio-container {
+  background: linear-gradient(145deg, rgba(20, 28, 48, 0.6), rgba(13, 19, 34, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.empty-portfolio-card {
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.portfolio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.portfolio-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.badge-holding-count {
+  background: rgba(0, 230, 118, 0.15);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.portfolio-empty-text {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 0;
+}
+
+.portfolio-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 16px;
+}
+
+.portfolio-card-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.25s ease, border-color 0.25s ease;
+}
+
+.portfolio-card-item:hover {
+  transform: translateY(-3px);
+  border-color: rgba(0, 230, 118, 0.4);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 230, 118, 0.06);
+}
+
+.card-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.holding-symbol {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.holding-lot-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.holding-lot-badge small {
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+
+.card-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.holding-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+}
+
+.metric-label {
+  color: var(--text-secondary);
+}
+
+.metric-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.holding-pnl-box {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  align-items: flex-end;
+}
+
+.card-item-actions {
+  display: grid;
+  grid-template-columns: 1.1fr 1.1fr 0.9fr;
+  gap: 8px;
+}
+
+.btn-card-action {
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.btn-card-action:hover {
+  filter: brightness(1.2);
+  transform: scale(1.02);
+}
+
+.btn-monitor {
+  background: linear-gradient(135deg, rgba(0, 176, 255, 0.2), rgba(0, 114, 255, 0.25));
+  border-color: #00b0ff;
+  color: #60a5fa;
+}
+
+.btn-sell-action {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(225, 29, 72, 0.25));
+  border-color: #f43f5e;
+  color: #fb7185;
+}
+
+.btn-buy-more {
+  background: rgba(0, 230, 118, 0.12);
+  border-color: rgba(0, 230, 118, 0.35);
+  color: #00e676;
+}
+
+/* ─── Quick Lot Chips (Modal Form Enhancement) ─────────────────────────── */
+.quick-lot-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chip-lot {
+  padding: 5px 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chip-lot:hover, .chip-lot:focus {
+  background: rgba(0, 230, 118, 0.15);
+  border-color: #00e676;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.chip-max {
+  background: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #fb7185;
+}
+.chip-max:hover {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: #f43f5e;
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .card-item-actions {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .monitoring-bar-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .mon-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .btn-mon-action {
+    flex: 1;
+    justify-content: center;
+  }
+}
+

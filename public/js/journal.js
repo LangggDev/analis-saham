@@ -9,6 +9,7 @@ const JournalManager = {
     evaluationData: null,
     transactions: [],
     preOrders: [],
+    activeHoldings: {},
     activeSubTab: 'realized',
 
     init() {
@@ -16,8 +17,11 @@ const JournalManager = {
         try {
             const cachedUser = localStorage.getItem('stockpulse_user');
             if (cachedUser) this.user = JSON.parse(cachedUser);
+            const cachedHoldings = localStorage.getItem('stockpulse_active_holdings');
+            if (cachedHoldings) this.activeHoldings = JSON.parse(cachedHoldings);
         } catch (e) {
             this.user = null;
+            this.activeHoldings = {};
         }
         this.loadPreOrders();
         this.bindHeaderEvents();
@@ -26,6 +30,7 @@ const JournalManager = {
                 this.updateAuthUI();
             }
             this.verifySession();
+            this.syncHoldingsInBackground();
         } else {
             this.updateAuthUI();
         }
@@ -76,6 +81,65 @@ const JournalManager = {
             this.updateAuthUI();
         } catch (e) {
             console.warn('[Session Offline]: Gagal terhubung ke server, tetap mempertahankan sesi lokal:', e.message);
+        }
+    },
+
+    async syncHoldingsInBackground() {
+        if (!this.token || !this.user) return;
+        try {
+            const res = await fetch('/api/transactions', {
+                headers: { 'Authorization': `Bearer ${this.token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                this.transactions = data.transactions || [];
+                this.evaluationData = data.evaluation || {};
+                this.updateHoldingsCache(data.evaluation?.holdings || {});
+            }
+        } catch (e) {
+            console.warn('[Holdings Sync Offline]: Menggunakan cache posisi aktif lokal.');
+        }
+    },
+
+    updateHoldingsCache(rawHoldings) {
+        const active = {};
+        Object.keys(rawHoldings || {}).forEach(sym => {
+            const h = rawHoldings[sym];
+            if (h && h.qty > 0) {
+                active[sym] = {
+                    qty: Number(h.qty),
+                    cost: Number(h.cost || 0),
+                    avgPrice: Number(h.avgPrice || Math.round(h.cost / h.qty))
+                };
+            }
+        });
+        this.activeHoldings = active;
+        localStorage.setItem('stockpulse_active_holdings', JSON.stringify(active));
+        
+        // Auto-insert any purchased stock into Watchlist and trigger resort
+        if (window.app && window.app.watchlist) {
+            let changed = false;
+            Object.keys(active).forEach(sym => {
+                if (!window.app.watchlist.symbols.includes(sym)) {
+                    window.app.watchlist.symbols.push(sym);
+                    changed = true;
+                }
+            });
+            if (changed) window.app.watchlist._save();
+            window.app.watchlist.render();
+        }
+        
+        // Update quick monitoring bar in symbol header if available
+        if (typeof window.updateQuickMonitoringBar === 'function') {
+            window.updateQuickMonitoringBar();
+        }
+    },
+
+    monitorStock(symbol) {
+        if (window.app) {
+            window.app.loadSymbol(symbol);
+            window.app._switchTab('quote');
+            this.showToast('Memantau chart dan analisa real-time saham ' + symbol);
         }
     },
 
@@ -488,6 +552,7 @@ const JournalManager = {
             const data = await res.json();
             this.transactions = data.transactions || [];
             this.evaluationData = data.evaluation || {};
+            this.updateHoldingsCache(data.evaluation?.holdings || {});
             
             this.renderJournalDashboard(container);
         } catch (e) {
@@ -545,6 +610,8 @@ const JournalManager = {
 
     getRealizedViewHTML(ev, pnlCls, winCls, fmtRp) {
         return `
+            ${this.getActiveHoldingsSectionHTML(fmtRp)}
+
             <div class="evaluation-summary-grid">
                 <div class="eval-card eval-winrate ${winCls}">
                     <div class="eval-title">Win Rate</div>
@@ -598,6 +665,98 @@ const JournalManager = {
                         ${this.renderTableRows()}
                     </tbody>
                 </table>
+            </div>
+        `;
+    },
+
+    getActiveHoldingsSectionHTML(fmtRp) {
+        const holdingSymbols = Object.keys(this.activeHoldings || {});
+        if (holdingSymbols.length === 0) {
+            return `
+                <div class="active-portfolio-container empty-portfolio-card">
+                    <div class="portfolio-header">
+                        <div class="portfolio-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00b972" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l-7-4A2 2 0 0 0 21 16z"></path></svg>
+                            <span>Posisi Portofolio Aktif (Saham Diprioritaskan Pantau)</span>
+                        </div>
+                        <span class="badge-status-free" style="padding:4px 10px; font-size:0.75rem;">0 Posisi Terbuka</span>
+                    </div>
+                    <p class="portfolio-empty-text">Belum ada saham yang sedang dimiliki saat ini. Ketika Anda mencatat transaksi BUY di jurnal, saham tersebut akan otomatis diprioritaskan di Watchlist dan langsung ditayangkan saat aplikasi dibuka.</p>
+                </div>
+            `;
+        }
+
+        const cardsHtml = holdingSymbols.map(sym => {
+            const pos = this.activeHoldings[sym];
+            const lots = Math.floor(pos.qty / 100);
+            
+            const livePriceObj = window.app?.watchlist?._priceCache?.[sym];
+            const livePrice = livePriceObj ? livePriceObj.price : pos.avgPrice;
+            
+            let pnlHtml = '<span style="color:#9ca3af; font-size:0.85rem;">Harga Live Menunggu...</span>';
+            if (livePrice && pos.avgPrice > 0) {
+                const totalCurrentValue = pos.qty * livePrice;
+                const floatingPnL = totalCurrentValue - pos.cost;
+                const floatingPct = ((livePrice - pos.avgPrice) / pos.avgPrice) * 100;
+                const sign = floatingPnL >= 0 ? '+' : '';
+                const color = floatingPnL > 0 ? '#00b972' : floatingPnL < 0 ? '#f43f5e' : '#9ca3af';
+                pnlHtml = `
+                    <div style="color:${color}; font-weight:700; font-size:1.05rem;">
+                        ${sign}${fmtRp(Math.round(floatingPnL))} 
+                        <span style="font-size:0.85rem;">(${sign}${floatingPct.toFixed(2)}%)</span>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="portfolio-card-item">
+                    <div class="card-item-header">
+                        <span class="holding-symbol">${sym}</span>
+                        <span class="holding-lot-badge">${lots} Lot <small>(${pos.qty.toLocaleString('id-ID')} lbr)</small></span>
+                    </div>
+                    <div class="card-item-body">
+                        <div class="holding-metric">
+                            <span class="metric-label">Harga Rata-rata Beli</span>
+                            <span class="metric-val">${fmtRp(pos.avgPrice)}</span>
+                        </div>
+                        <div class="holding-metric">
+                            <span class="metric-label">Harga Pasar Live</span>
+                            <span class="metric-val" style="color:#60a5fa;">${fmtRp(livePrice)}</span>
+                        </div>
+                        <div class="holding-metric holding-pnl-box">
+                            <span class="metric-label">Estimasi P/L (Floating)</span>
+                            ${pnlHtml}
+                        </div>
+                    </div>
+                    <div class="card-item-actions">
+                        <button class="btn-card-action btn-monitor" onclick="JournalManager.monitorStock('${sym}')" title="Buka chart dan analisa teknikal saham ini">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                            <span>Pantau Chart</span>
+                        </button>
+                        <button class="btn-card-action btn-sell-action" onclick="JournalManager.showAddTradeModal('${sym}', '${livePrice || pos.avgPrice}', 'SELL', '${pos.qty}')" title="Jual atau evaluasi penutupan posisi">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                            <span>Jual / Evaluasi</span>
+                        </button>
+                        <button class="btn-card-action btn-buy-more" onclick="JournalManager.showAddTradeModal('${sym}', '${livePrice || pos.avgPrice}', 'BUY')" title="Catat pembelian baru / average up/down">
+                            <span>+ Beli Lagi</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="active-portfolio-container">
+                <div class="portfolio-header">
+                    <div class="portfolio-title">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00b972" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l-7-4A2 2 0 0 0 21 16z"></path></svg>
+                        <span>Posisi Portofolio Aktif (Utama Dipantau)</span>
+                    </div>
+                    <span class="badge-holding-count">${holdingSymbols.length} Saham Dimiliki</span>
+                </div>
+                <div class="portfolio-cards-grid">
+                    ${cardsHtml}
+                </div>
             </div>
         `;
     },
@@ -842,7 +1001,7 @@ const JournalManager = {
         }).join('');
     },
 
-    showAddTradeModal(defaultSymbol = '', defaultPrice = '') {
+    showAddTradeModal(defaultSymbol = '', defaultPrice = '', defaultType = 'BUY', defaultQty = '') {
         if (!this.token) {
             this.showToast('Silakan login terlebih dahulu.');
             this.showAuthModal('login');
@@ -858,11 +1017,12 @@ const JournalManager = {
         }
 
         const symValue = defaultSymbol || (window.app && window.app.currentSymbol) || 'BBCA.JK';
+        const isSell = defaultType === 'SELL';
 
         modal.innerHTML = `
             <div class="modal-card tx-modal-card">
                 <div class="modal-header">
-                    <h3>Catat Jurnal Transaksi Baru</h3>
+                    <h3>${isSell ? 'Tutup Posisi / Evaluasi Jual Saham' : 'Catat Jurnal Transaksi Baru'}</h3>
                     <button class="modal-close" onclick="JournalManager.closeModal('addTxModal')">&times;</button>
                 </div>
                 <form onsubmit="JournalManager.handleSubmitTrade(event)" class="tx-form">
@@ -874,8 +1034,8 @@ const JournalManager = {
                         <div class="form-group">
                             <label>Tipe Transaksi</label>
                             <select id="txType">
-                                <option value="BUY">BUY (Beli)</option>
-                                <option value="SELL">SELL (Jual & Evaluasi P&L)</option>
+                                <option value="BUY" ${!isSell ? 'selected' : ''}>BUY (Beli Saham)</option>
+                                <option value="SELL" ${isSell ? 'selected' : ''}>SELL (Jual & Evaluasi P&L)</option>
                             </select>
                         </div>
                     </div>
@@ -887,8 +1047,21 @@ const JournalManager = {
                         </div>
                         <div class="form-group">
                             <label>Jumlah Lembar (1 Lot = 100 Lbr)</label>
-                            <input type="number" id="txQty" required placeholder="1000" oninput="JournalManager.calcLotPreview()">
-                            <small id="lotPreviewText" class="lot-preview">Equivalent: 10 Lot</small>
+                            <input type="number" id="txQty" value="${defaultQty}" required placeholder="1000" oninput="JournalManager.calcLotPreview()">
+                            <small id="lotPreviewText" class="lot-preview">Equivalent: 0 Lot</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-size:0.8rem; color:var(--text-secondary);">Pilihan Cepat Lot:</label>
+                        <div class="quick-lot-chips">
+                            <button type="button" class="chip-lot" onclick="JournalManager.setQuickLot(1)">1 Lot</button>
+                            <button type="button" class="chip-lot" onclick="JournalManager.setQuickLot(5)">5 Lot</button>
+                            <button type="button" class="chip-lot" onclick="JournalManager.setQuickLot(10)">10 Lot</button>
+                            <button type="button" class="chip-lot" onclick="JournalManager.setQuickLot(20)">20 Lot</button>
+                            <button type="button" class="chip-lot" onclick="JournalManager.setQuickLot(50)">50 Lot</button>
+                            <button type="button" class="chip-lot" onclick="JournalManager.setQuickLot(100)">100 Lot</button>
+                            ${isSell && defaultQty ? `<button type="button" class="chip-lot chip-max" onclick="JournalManager.setQuickLot(${Math.floor(Number(defaultQty)/100)})">Max (${Math.floor(Number(defaultQty)/100)} Lot)</button>` : ''}
                         </div>
                     </div>
 
@@ -906,7 +1079,7 @@ const JournalManager = {
 
                     <div class="form-group">
                         <label>Catatan Evaluasi / Alasan Trade</label>
-                        <textarea id="txNotes" rows="3" placeholder="Tuliskan evaluasi transaksi..."></textarea>
+                        <textarea id="txNotes" rows="3" placeholder="Tuliskan evaluasi transaksi atau alasan beli/jual..."></textarea>
                     </div>
 
                     <button type="submit" class="btn-submit-neon" style="margin-top:10px;">Simpan Transaksi</button>
@@ -915,6 +1088,14 @@ const JournalManager = {
         `;
         modal.style.display = 'flex';
         this.calcLotPreview();
+    },
+
+    setQuickLot(lots) {
+        const el = document.getElementById('txQty');
+        if (el) {
+            el.value = lots * 100;
+            this.calcLotPreview();
+        }
     },
 
     calcLotPreview() {
