@@ -493,14 +493,14 @@ async function fetchNewsData(symbol) {
       const result = await yahooFetch(
         `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=0&newsCount=20&listsCount=0`
       );
-      
+
       const rawNews = result?.news || [];
-      
+
       const filteredNews = rawNews.filter(item => {
-          if (item.relatedTickers && item.relatedTickers.length > 0) {
-              return item.relatedTickers.some(t => t.toUpperCase().includes(baseSymbol));
-          }
-          return item.title && item.title.toUpperCase().includes(baseSymbol);
+        if (item.relatedTickers && item.relatedTickers.length > 0) {
+          return item.relatedTickers.some(t => t.toUpperCase().includes(baseSymbol));
+        }
+        return item.title && item.title.toUpperCase().includes(baseSymbol);
       });
 
       return filteredNews.map((item) => ({
@@ -532,19 +532,19 @@ app.get('/api/news/:symbol', async (req, res) => {
 const keywordSentiment = (text) => {
   const positive = ['naik', 'laba', 'untung', 'tumbuh', 'rekor', 'lonjakan', 'beli', 'bullish', 'investasi', 'dividen', 'profit', 'growth', 'surge', 'buy'];
   const negative = ['turun', 'rugi', 'anjlok', 'merosot', 'jual', 'bearish', 'skandal', 'denda', 'phk', 'loss', 'drop', 'plunge', 'sell', 'cut'];
-  
+
   const words = text.toLowerCase().match(/\b\w+\b/g) || [];
   let posCount = 0;
   let negCount = 0;
-  
+
   words.forEach(w => {
     if (positive.includes(w)) posCount++;
     if (negative.includes(w)) negCount++;
   });
-  
+
   let sentiment = 'NEUTRAL';
   let score = 50;
-  
+
   if (posCount > negCount) {
     sentiment = 'POSITIVE';
     score = 75 + Math.min(25, (posCount - negCount) * 5);
@@ -552,7 +552,7 @@ const keywordSentiment = (text) => {
     sentiment = 'NEGATIVE';
     score = 25 - Math.min(25, (negCount - posCount) * 5);
   }
-  
+
   return { sentiment, score };
 };
 
@@ -566,13 +566,13 @@ app.get('/api/sentiment/:symbol', async (req, res) => {
     }
 
     const articlesToAnalyze = news.slice(0, 10);
-    
+
     // Check if Gemini AI is available
     if (process.env.GEMINI_API_KEY) {
       try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        
+
         const prompt = `Analyze the sentiment of the following news headlines for stock ${symbol}.
 For each headline, provide a sentiment (POSITIVE, NEGATIVE, or NEUTRAL) and a score from 0 to 100 (where 0 is extremely negative, 50 is neutral, and 100 is extremely positive).
 Format your response as a valid JSON array of objects, where each object has "sentiment" (string) and "score" (number). Do not include any markdown formatting or extra text, just the JSON array.
@@ -582,9 +582,9 @@ ${articlesToAnalyze.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`;
         const result = await model.generateContent(prompt);
         let text = result.response.text();
         text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        
+
         const aiResults = JSON.parse(text);
-        
+
         let totalScore = 0;
         const articles = articlesToAnalyze.map((article, i) => {
           const aiResult = aiResults[i] || { sentiment: 'NEUTRAL', score: 50 };
@@ -599,12 +599,12 @@ ${articlesToAnalyze.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`;
             link: article.link
           };
         });
-        
+
         const avgScore = Math.round(totalScore / articles.length);
         let overallSentiment = 'NEUTRAL';
         if (avgScore >= 65) overallSentiment = 'POSITIVE';
         else if (avgScore <= 35) overallSentiment = 'NEGATIVE';
-        
+
         return res.json({
           symbol,
           overallSentiment,
@@ -613,12 +613,12 @@ ${articlesToAnalyze.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`;
           articles,
           _method: 'gemini'
         });
-        
+
       } catch (aiError) {
         console.warn('Gemini API failed, falling back to keyword analysis:', aiError.message);
       }
     }
-    
+
     // Fallback: Keyword analysis
     let totalScore = 0;
     const articles = articlesToAnalyze.map(article => {
@@ -634,12 +634,12 @@ ${articlesToAnalyze.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`;
         link: article.link
       };
     });
-    
+
     const avgScore = Math.round(totalScore / articles.length);
     let overallSentiment = 'NEUTRAL';
     if (avgScore >= 60) overallSentiment = 'POSITIVE';
     else if (avgScore <= 40) overallSentiment = 'NEGATIVE';
-    
+
     res.json({
       symbol,
       overallSentiment,
@@ -648,7 +648,7 @@ ${articlesToAnalyze.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`;
       articles,
       _method: 'keyword'
     });
-    
+
   } catch (err) {
     console.error(`Error fetching sentiment for ${symbol}:`, err.message);
     res.status(500).json({ error: `Failed to fetch sentiment for ${symbol}`, details: err.message });
@@ -686,10 +686,10 @@ app.get('/api/summary/:symbol', async (req, res) => {
 async function fetchTradingViewFundamental(symbol) {
   try {
     const baseTicker = symbol.replace('.JK', '').toUpperCase();
-    const marketUrl = symbol.endsWith('.JK') 
-      ? 'https://scanner.tradingview.com/indonesia/scan' 
+    const marketUrl = symbol.endsWith('.JK')
+      ? 'https://scanner.tradingview.com/indonesia/scan'
       : 'https://scanner.tradingview.com/global/scan';
-      
+
     const res = await fetch(marketUrl, {
       method: 'POST',
       headers: {
@@ -700,23 +700,23 @@ async function fetchTradingViewFundamental(symbol) {
       body: JSON.stringify({
         symbols: { tickers: [symbol.endsWith('.JK') ? `IDX:${baseTicker}` : baseTicker] },
         columns: [
-          "name", 
-          "price_earnings_ttm", 
-          "price_book_mrq", 
+          "name",
+          "price_earnings_ttm",
+          "price_book_mrq",
           "price_book_fq",
-          "return_on_equity_ttm", 
+          "return_on_equity_ttm",
           "return_on_equity_fq",
-          "debt_to_equity_mrq", 
+          "debt_to_equity_mrq",
           "debt_to_equity_fq",
-          "basic_eps_ttm", 
+          "basic_eps_ttm",
           "earnings_per_share_basic_ttm",
-          "dividend_yield_recent", 
+          "dividend_yield_recent",
           "dividend_yield_trailing_12_month",
-          "market_cap_basic", 
-          "total_revenue_yoy_growth_ttm", 
-          "net_margin_ttm", 
-          "current_ratio_fq", 
-          "free_cash_flow_ttm", 
+          "market_cap_basic",
+          "total_revenue_yoy_growth_ttm",
+          "net_margin_ttm",
+          "current_ratio_fq",
+          "free_cash_flow_ttm",
           "close"
         ]
       })
@@ -783,7 +783,7 @@ app.get('/api/fundamental/:symbol', async (req, res) => {
         // Try quoteSummary endpoint for rich fundamental data (requires crumb auth)
         const modules = 'financialData,defaultKeyStatistics,summaryDetail,earningsHistory,balanceSheetHistory,incomeStatementHistory';
         const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
-        
+
         let result;
         try {
           result = await yahooAuthFetch(url);
@@ -801,7 +801,7 @@ app.get('/api/fundamental/:symbol', async (req, res) => {
               fetchChartData(symbol, '1d', '1y').catch(() => ({ meta: {} }))
             ]);
             const meta = chart?.meta || {};
-            
+
             const combined = {
               symbol: meta.symbol || symbol,
               per: tvData?.per ?? v8Data?.per ?? null,
@@ -857,39 +857,39 @@ app.get('/api/fundamental/:symbol', async (req, res) => {
           pbv: getRaw(ks, 'priceToBook'),
           priceToSales: getRaw(ks, 'priceToSalesTrailing12Months'),
           enterpriseValue: getRaw(ks, 'enterpriseValue'),
-          
+
           // Profitability
           roe: getRaw(fd, 'returnOnEquity'),
           roa: getRaw(fd, 'returnOnAssets'),
           profitMargin: getRaw(fd, 'profitMargins'),
           operatingMargin: getRaw(fd, 'operatingMargins'),
           grossMargin: getRaw(fd, 'grossMargins'),
-          
+
           // Financial health
           der: getRaw(fd, 'debtToEquity') != null ? getRaw(fd, 'debtToEquity') / 100 : null,
           currentRatio: getRaw(fd, 'currentRatio'),
           quickRatio: getRaw(fd, 'quickRatio'),
-          
+
           // Per-share data
           eps: getRaw(ks, 'trailingEps') ?? getRaw(fd, 'earningsPerShare'),
           bookValue: getRaw(ks, 'bookValue'),
-          
+
           // Growth
           revenueGrowth: getRaw(fd, 'revenueGrowth'),
           earningsGrowth: getRaw(fd, 'earningsGrowth'),
-          
+
           // Income
           dividendYield: getRaw(sd, 'dividendYield') ?? getRaw(ks, 'lastDividendValue'),
           dividendRate: getRaw(sd, 'dividendRate'),
           payoutRatio: getRaw(sd, 'payoutRatio'),
-          
+
           // Cash flow
           freeCashFlow: getRaw(fd, 'freeCashflow'),
           operatingCashFlow: getRaw(fd, 'operatingCashflow'),
           totalRevenue: getRaw(fd, 'totalRevenue'),
           totalDebt: getRaw(fd, 'totalDebt'),
           totalCash: getRaw(fd, 'totalCash'),
-          
+
           // Market data
           marketCap: getRaw(sd, 'marketCap'),
           beta: getRaw(ks, 'beta'),
@@ -897,7 +897,7 @@ app.get('/api/fundamental/:symbol', async (req, res) => {
           fiftyTwoWeekLow: getRaw(sd, 'fiftyTwoWeekLow'),
           fiftyDayAverage: getRaw(sd, 'fiftyDayAverage'),
           twoHundredDayAverage: getRaw(sd, 'twoHundredDayAverage'),
-          
+
           // Formatted strings for display
           _formatted: {
             per: getFmt(sd, 'trailingPE') ?? getFmt(ks, 'trailingPE'),
@@ -927,46 +927,46 @@ app.get('/api/market-status/:exchange', async (req, res) => {
   try {
     const status = await withCache(cacheKey, 30, () => {
       const now = new Date();
-      
+
       // Market hours configuration (all times in local timezone)
       const markets = {
         // Indonesian Stock Exchange (IDX) — WIB (UTC+7)
-        'IDX': { tz: 7, open: [9, 0], close: [15, 30], days: [1,2,3,4,5], name: 'Indonesia Stock Exchange', preOpen: [8, 45] },
-        'JKT': { tz: 7, open: [9, 0], close: [15, 30], days: [1,2,3,4,5], name: 'Indonesia Stock Exchange', preOpen: [8, 45] },
+        'IDX': { tz: 7, open: [9, 0], close: [15, 30], days: [1, 2, 3, 4, 5], name: 'Indonesia Stock Exchange', preOpen: [8, 45] },
+        'JKT': { tz: 7, open: [9, 0], close: [15, 30], days: [1, 2, 3, 4, 5], name: 'Indonesia Stock Exchange', preOpen: [8, 45] },
         // US Markets — ET (UTC-4 DST / UTC-5 EST)
-        'NYSE': { tz: -4, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'New York Stock Exchange', preOpen: [4, 0] },
-        'NASDAQ': { tz: -4, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'NASDAQ', preOpen: [4, 0] },
-        'NMS': { tz: -4, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'NASDAQ', preOpen: [4, 0] },
+        'NYSE': { tz: -4, open: [9, 30], close: [16, 0], days: [1, 2, 3, 4, 5], name: 'New York Stock Exchange', preOpen: [4, 0] },
+        'NASDAQ': { tz: -4, open: [9, 30], close: [16, 0], days: [1, 2, 3, 4, 5], name: 'NASDAQ', preOpen: [4, 0] },
+        'NMS': { tz: -4, open: [9, 30], close: [16, 0], days: [1, 2, 3, 4, 5], name: 'NASDAQ', preOpen: [4, 0] },
         // Hong Kong
-        'HKSE': { tz: 8, open: [9, 30], close: [16, 0], days: [1,2,3,4,5], name: 'Hong Kong Stock Exchange', preOpen: [9, 0] },
+        'HKSE': { tz: 8, open: [9, 30], close: [16, 0], days: [1, 2, 3, 4, 5], name: 'Hong Kong Stock Exchange', preOpen: [9, 0] },
         // Tokyo
-        'TSE': { tz: 9, open: [9, 0], close: [15, 0], days: [1,2,3,4,5], name: 'Tokyo Stock Exchange', preOpen: [8, 0] },
+        'TSE': { tz: 9, open: [9, 0], close: [15, 0], days: [1, 2, 3, 4, 5], name: 'Tokyo Stock Exchange', preOpen: [8, 0] },
         // London
-        'LSE': { tz: 1, open: [8, 0], close: [16, 30], days: [1,2,3,4,5], name: 'London Stock Exchange', preOpen: [7, 0] },
+        'LSE': { tz: 1, open: [8, 0], close: [16, 30], days: [1, 2, 3, 4, 5], name: 'London Stock Exchange', preOpen: [7, 0] },
       };
 
       const market = markets[exchange] || markets['IDX'];
-      
+
       // Convert current UTC time to market local time
       const utcHours = now.getUTCHours();
       const utcMinutes = now.getUTCMinutes();
       const utcDay = now.getUTCDay();
-      
+
       let localHours = (utcHours + market.tz + 24) % 24;
       let localMinutes = utcMinutes;
       let localDay = utcDay;
-      
+
       // Adjust day if timezone shift crosses midnight
       if (utcHours + market.tz >= 24) localDay = (utcDay + 1) % 7;
       if (utcHours + market.tz < 0) localDay = (utcDay + 6) % 7;
-      
+
       const localTimeMinutes = localHours * 60 + localMinutes;
       const openMinutes = market.open[0] * 60 + market.open[1];
       const closeMinutes = market.close[0] * 60 + market.close[1];
       const preOpenMinutes = market.preOpen ? market.preOpen[0] * 60 + market.preOpen[1] : openMinutes - 30;
-      
+
       const isWeekday = market.days.includes(localDay);
-      
+
       let state, label;
       if (!isWeekday) {
         state = 'CLOSED';
@@ -981,7 +981,7 @@ app.get('/api/market-status/:exchange', async (req, res) => {
         state = 'CLOSED';
         label = 'Pasar tutup';
       }
-      
+
       // Calculate next open time
       let nextOpenText = '';
       if (state !== 'OPEN') {
@@ -1000,8 +1000,8 @@ app.get('/api/market-status/:exchange', async (req, res) => {
         state,
         label,
         nextOpen: nextOpenText,
-        localTime: `${String(localHours).padStart(2,'0')}:${String(localMinutes).padStart(2,'0')}`,
-        tradingHours: `${String(market.open[0]).padStart(2,'0')}:${String(market.open[1]).padStart(2,'0')} - ${String(market.close[0]).padStart(2,'0')}:${String(market.close[1]).padStart(2,'0')}`,
+        localTime: `${String(localHours).padStart(2, '0')}:${String(localMinutes).padStart(2, '0')}`,
+        tradingHours: `${String(market.open[0]).padStart(2, '0')}:${String(market.open[1]).padStart(2, '0')} - ${String(market.close[0]).padStart(2, '0')}:${String(market.close[1]).padStart(2, '0')}`,
         isPreOrderMode: state !== 'OPEN',
       });
     });
@@ -1279,8 +1279,8 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     const priceRising = priceTrendSlope > 0.5;   // >0.5% = meaningful uptrend
     const priceFalling = priceTrendSlope < -0.5;  // <-0.5% = meaningful downtrend
     const obvDivergence = (obvTrend === 'FALLING' && priceRising) ? 'DISTRIBUTION'
-                        : (obvTrend === 'RISING' && priceFalling) ? 'ACCUMULATION'
-                        : 'CONFIRMED';
+      : (obvTrend === 'RISING' && priceFalling) ? 'ACCUMULATION'
+        : 'CONFIRMED';
 
     // ═══════════════════════════════════════════════════════════════
     // 6d. Candlestick Pattern Detection (with Volume Confirmation & Multi-Bar Trend Context)
@@ -1304,10 +1304,10 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
 
       // Multi-bar trend context (5-bar lookback for trend direction)
       const trendSlice = closes.slice(-5);
-      const isDowntrend = trendSlice[0] > trendSlice[trendSlice.length - 1] && 
-                          trendSlice.slice(0, 3).every((v, i) => i === 0 || v <= trendSlice[i-1]);
-      const isUptrend = trendSlice[0] < trendSlice[trendSlice.length - 1] && 
-                        trendSlice.slice(0, 3).every((v, i) => i === 0 || v >= trendSlice[i-1]);
+      const isDowntrend = trendSlice[0] > trendSlice[trendSlice.length - 1] &&
+        trendSlice.slice(0, 3).every((v, i) => i === 0 || v <= trendSlice[i - 1]);
+      const isUptrend = trendSlice[0] < trendSlice[trendSlice.length - 1] &&
+        trendSlice.slice(0, 3).every((v, i) => i === 0 || v >= trendSlice[i - 1]);
 
       // Bullish Engulfing: prev bearish candle fully engulfed by curr bullish candle + volume
       if (currBullish && !prev1Bullish && curr.open <= prev1.close && curr.close >= prev1.open && currBody > prev1Body) {
@@ -1918,7 +1918,7 @@ async function fetchTradingViewRatings() {
   if (tvRatingsCache && (now - tvRatingsTimestamp) < TV_CACHE_TTL) {
     return tvRatingsCache;
   }
-  
+
   console.log('[TradingView] Fetching live composite technical ratings from IDX Screener...');
   try {
     const res = await fetch('https://scanner.tradingview.com/indonesia/scan', {
@@ -2283,8 +2283,8 @@ app.get('/api/recommendations/bsjp', async (req, res) => {
       //          a.obvTrend > 0 was ALWAYS false (string > number = false in JS)
       const candidates = [...analyses]
         .filter(a => a.score >= 50 && !a.isIlliquidTrap && (
-          a.obvDivergence === 'ACCUMULATION' || 
-          a.obvTrend === 'RISING' || 
+          a.obvDivergence === 'ACCUMULATION' ||
+          a.obvTrend === 'RISING' ||
           a.volRatio >= 1.2
         ) && a.priceTrendSlope > -1) // exclude stocks in clear downtrend
         .sort((a, b) => b.volRatio - a.volRatio);
@@ -2331,7 +2331,7 @@ app.get('/api/recommendations/bpjs', async (req, res) => {
       // BPJS: Saham berdaya dorong intraday tinggi
       // FIX: More specific filter for morning momentum (RSI not overbought, trending)
       const candidates = [...analyses]
-        .filter(a => a.score >= 50 && !a.isIlliquidTrap && a.volRatio >= 1.1 && 
+        .filter(a => a.score >= 50 && !a.isIlliquidTrap && a.volRatio >= 1.1 &&
           a.rsi >= 35 && a.rsi <= 65 && // not oversold or overbought — momentum sweet spot
           a.priceTrendSlope > 0 // price in upward trend
         )
@@ -2380,8 +2380,8 @@ app.get('/api/recommendations/bsij', async (req, res) => {
       // FIX #10: obvTrend is string, not number! Fixed comparison + better session II filter
       const candidates = [...analyses]
         .filter(a => a.score >= 50 && !a.isIlliquidTrap && a.volRatio >= 1.1 && (
-          a.obvDivergence === 'ACCUMULATION' || 
-          a.obvTrend === 'RISING' || 
+          a.obvDivergence === 'ACCUMULATION' ||
+          a.obvTrend === 'RISING' ||
           a.changePercent > 0
         ) && a.rsi >= 40 && a.rsi <= 70) // momentum sweet zone for session II
         .sort((a, b) => (b.volRatio * b.score) - (a.volRatio * a.score));
@@ -2489,7 +2489,7 @@ function generateFallbackReasoning(stock) {
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
+
   if (!token) {
     return res.status(401).json({ error: 'Akses ditolak: Silakan login terlebih dahulu untuk mengakses fitur ini.' });
   }
@@ -2681,7 +2681,7 @@ app.post('/api/payment/checkout', authenticateToken, async (req, res) => {
   try {
     const { method } = req.body; // 'QRIS', 'VA_BCA', 'VA_MANDIRI'
     const orderId = `PRO-${req.user.id}-${Date.now()}`;
-    const amount = 99000;
+    const amount = 49000;
 
     // Simpan data order awal ke tabel app_orders
     await pool.query(
@@ -2735,8 +2735,8 @@ app.post('/api/payment/checkout', authenticateToken, async (req, res) => {
 
     // Fallback mode simulasi (jika API Key belum dipesan/dikonfigurasi di .env)
     const vaNumber = method === 'VA_BCA' ? '88012' + Math.floor(10000000 + Math.random() * 90000000)
-                   : method === 'VA_MANDIRI' ? '89012' + Math.floor(10000000 + Math.random() * 90000000)
-                   : null;
+      : method === 'VA_MANDIRI' ? '89012' + Math.floor(10000000 + Math.random() * 90000000)
+        : null;
 
     res.json({
       success: true,
@@ -2918,7 +2918,7 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
     let bestWin = 0;
     let worstLoss = 0;
     let totalInvested = 0; // estimasi posisi aktif/terbuka (BUY - SELL qty)
-    
+
     // Group per symbol to check holdings in chronological order (oldest to newest)
     const holdings = {};
     const chronologicalTx = [...txRes.rows].reverse();
@@ -2978,7 +2978,7 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 
 app.post('/api/transactions', authenticateToken, async (req, res) => {
   const { symbol, type, price, quantity, strategy_tag, notes, transaction_date } = req.body;
-  
+
   if (!symbol || !type || !price || !quantity) {
     return res.status(400).json({ error: 'Simbol saham, tipe (BUY/SELL), harga, dan jumlah wajib diisi.' });
   }
@@ -2990,7 +2990,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
   const numPrice = Number(price);
   const numQty = Number(quantity);
   const totalVal = numPrice * numQty;
-  
+
   if (isNaN(numPrice) || numPrice <= 0 || isNaN(numQty) || numQty <= 0) {
     return res.status(400).json({ error: 'Harga dan jumlah harus berupa angka positif.' });
   }
