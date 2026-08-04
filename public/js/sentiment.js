@@ -60,8 +60,8 @@ const SentimentAnalysis = {
         }
 
         const methodMap = {
-            'gemini': '🤖 AI Analysis (Gemini)',
-            'keyword': '📝 Keyword Matching',
+            'gemini': 'AI Analysis (Gemini)',
+            'keyword': 'Keyword Matching',
             'none': 'Tidak ada data'
         };
 

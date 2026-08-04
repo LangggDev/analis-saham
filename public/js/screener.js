@@ -162,7 +162,7 @@ const StockScreener = {
     // ─── Preset Filter Templates ────────────────────────────────────────
     PRESETS: [
         {
-            name: '💎 Value Stocks',
+            name: 'Value Stocks',
             desc: 'PER rendah, PBV rendah, dividen tinggi',
             filters: [
                 { key: 'per', op: '<=', value: 15 },
@@ -171,7 +171,7 @@ const StockScreener = {
             ],
         },
         {
-            name: '🚀 Growth Stocks',
+            name: 'Growth Stocks',
             desc: 'ROE tinggi, revenue growth positif',
             filters: [
                 { key: 'roe', op: '>=', value: 15 },
@@ -179,7 +179,7 @@ const StockScreener = {
             ],
         },
         {
-            name: '🛡️ Safe & Stable',
+            name: 'Safe & Stable',
             desc: 'DER rendah, current ratio tinggi, profit margin baik',
             filters: [
                 { key: 'der', op: '<=', value: 1 },
@@ -188,7 +188,7 @@ const StockScreener = {
             ],
         },
         {
-            name: '📈 Strong Buy Signal',
+            name: 'Strong Buy Signal',
             desc: 'Sinyal teknikal & fundamental kuat',
             filters: [
                 { key: 'technicalSignal', op: '==', value: 'STRONG_BUY' },
@@ -813,7 +813,7 @@ const StockScreener = {
         if (this._results.length === 0) {
             container.innerHTML = `
                 <div class="screener-empty-state">
-                    <span class="empty-state-icon">🔍</span>
+                    <span class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
                     <span class="empty-state-title">Belum ada data screening</span>
                     <span class="empty-state-text">Klik tombol "Scan Saham" untuk memulai screening</span>
                 </div>
@@ -824,7 +824,7 @@ const StockScreener = {
         if (this._filteredResults.length === 0) {
             container.innerHTML = `
                 <div class="screener-empty-state">
-                    <span class="empty-state-icon">🔎</span>
+                    <span class="empty-state-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
                     <span class="empty-state-title">Tidak ada saham yang cocok</span>
                     <span class="empty-state-text">Ubah filter untuk menampilkan hasil</span>
                 </div>
@@ -983,7 +983,7 @@ const StockScreener = {
                 btn.innerHTML = '<span class="scan-spinner"></span> Scanning...';
             } else {
                 btn.disabled = false;
-                btn.innerHTML = '🔍 Scan Saham';
+                btn.innerHTML = 'Scan Saham';
             }
         }
 

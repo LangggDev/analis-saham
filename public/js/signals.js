@@ -765,7 +765,7 @@ const SignalEngine = {
         }
 
         if (squeeze) {
-            description += ' ⚡ Squeeze terdeteksi!';
+            description += ' (Squeeze terdeteksi)';
         }
 
         return {
@@ -804,7 +804,7 @@ const SignalEngine = {
             description = `EMA 12 di atas EMA 26 (+${pctDiff.toFixed(2)}%)`;
             if (freshCross) {
                 score = Math.min(score + 0.2, 1);
-                description = '🔥 EMA 12/26 baru bullish crossover!';
+                description = 'EMA 12/26 baru bullish crossover!';
             }
         } else if (last12.value < last26.value) {
             score = -(0.3 + Math.min(Math.abs(pctDiff) / 5, 0.5));
@@ -812,7 +812,7 @@ const SignalEngine = {
             description = `EMA 12 di bawah EMA 26 (${pctDiff.toFixed(2)}%)`;
             if (freshCross) {
                 score = Math.max(score - 0.2, -1);
-                description = '⚠️ EMA 12/26 baru bearish crossover!';
+                description = 'EMA 12/26 baru bearish crossover!';
             }
         } else {
             signal = 'NEUTRAL';

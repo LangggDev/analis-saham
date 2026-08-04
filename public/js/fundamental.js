@@ -201,13 +201,13 @@ const FundamentalAnalysis = {
 
         // Generate human-readable source label
         const sourceLabels = {
-            1: '📈 Hanya Teknikal',
+            1: 'Hanya Teknikal',
             2: dataSources.includes('fundamental')
-                ? '📈📋 Teknikal + Fundamental'
-                : '📈💬 Teknikal + Sentimen',
-            3: '📈📋💬 Analisis Lengkap'
+                ? 'Teknikal + Fundamental'
+                : 'Teknikal + Sentimen',
+            3: 'Analisis Lengkap'
         };
-        const sourceLabel = sourceLabels[dataSources.length] || '📈 Teknikal';
+        const sourceLabel = sourceLabels[dataSources.length] || 'Teknikal';
 
         return { combinedScore: combined, signal, label, dataSources, sourceLabel };
     },
@@ -527,15 +527,15 @@ const FundamentalAnalysis = {
 
         let rec = '';
         if (score >= 80) {
-            rec = '🟢 Fundamental sangat kuat. ';
+            rec = 'Fundamental sangat kuat. ';
         } else if (score >= 65) {
-            rec = '🟢 Fundamental baik. ';
+            rec = 'Fundamental baik. ';
         } else if (score >= 45) {
-            rec = '🟡 Fundamental cukup. ';
+            rec = 'Fundamental cukup. ';
         } else if (score >= 25) {
-            rec = '🟠 Fundamental lemah. ';
+            rec = 'Fundamental lemah. ';
         } else {
-            rec = '🔴 Fundamental sangat lemah. ';
+            rec = 'Fundamental sangat lemah. ';
         }
 
         if (strengths.length > 0) {

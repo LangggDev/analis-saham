@@ -326,11 +326,11 @@ const PreOrderManager = {
      */
     getStatusConfig(status) {
         const configs = {
-            'PENDING': { label: 'Menunggu', class: 'status-pending', icon: '⏳' },
-            'READY': { label: 'Siap Eksekusi', class: 'status-ready', icon: '🟢' },
-            'EXECUTED': { label: 'Tereksekusi', class: 'status-executed', icon: '✅' },
-            'CANCELLED': { label: 'Dibatalkan', class: 'status-cancelled', icon: '❌' },
-            'EXPIRED': { label: 'Kedaluwarsa', class: 'status-expired', icon: '⏰' },
+            'PENDING': { label: 'Menunggu', class: 'status-pending', icon: '•' },
+            'READY': { label: 'Siap Eksekusi', class: 'status-ready', icon: '•' },
+            'EXECUTED': { label: 'Tereksekusi', class: 'status-executed', icon: '•' },
+            'CANCELLED': { label: 'Dibatalkan', class: 'status-cancelled', icon: '•' },
+            'EXPIRED': { label: 'Kedaluwarsa', class: 'status-expired', icon: '•' },
         };
         return configs[status] || configs['PENDING'];
     },

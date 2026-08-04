@@ -717,7 +717,7 @@ class NotificationManager {
     _sendBrowserNotification(data) {
         if (this.permission !== 'granted') return;
 
-        const icon = data.signal === 'STRONG_BUY' ? '🟢' : '🔴';
+        const icon = data.signal === 'STRONG_BUY' ? '[BUY]' : '[SELL]';
         const signalText = data.signal.replace(/_/g, ' ');
         const title = `${icon} ${signalText} — ${data.symbol}`;
 
@@ -743,7 +743,7 @@ class NotificationManager {
 
         const signalText = data.signal.replace(/_/g, ' ');
         const signalClass = data.signal.toLowerCase();
-        const icon = data.signal.includes('BUY') ? '📈' : '📉';
+        const icon = data.signal.includes('BUY') ? '[+]' : '[-]';
         const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
         const toast = document.createElement('div');
@@ -783,7 +783,7 @@ class NotificationManager {
         if (this.notifications.length === 0) {
             list.innerHTML = `
                 <div class="empty-state">
-                    <span class="empty-state-icon">🔕</span>
+                    <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg></span>
                     <span class="empty-state-title">Belum ada notifikasi</span>
                     <span class="empty-state-text">Notifikasi muncul saat ada sinyal kuat</span>
                 </div>
@@ -794,7 +794,7 @@ class NotificationManager {
         list.innerHTML = this.notifications.slice(0, 20).map(n => {
             const signalText = n.signal.replace(/_/g, ' ');
             const isBuy = n.signal.includes('BUY');
-            const icon = isBuy ? '📈' : '📉';
+            const icon = isBuy ? '[+]' : '[-]';
             const timeStr = n.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
             const dateStr = n.timestamp.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 
@@ -944,7 +944,7 @@ class WatchlistManager {
                 ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`
                 : '';
 
-            const badgeHtml = isHolding ? `<span class="watchlist-badge-portfolio" title="Saham Dibeli / Dipunyai di Portofolio">📌 PORTFOLIO</span>` : '';
+            const badgeHtml = isHolding ? `<span class="watchlist-badge-portfolio" title="Saham Dibeli / Dipunyai di Portofolio">PORTFOLIO</span>` : '';
 
             item.innerHTML = `
                 <div class="watchlist-item-info">
@@ -1260,19 +1260,19 @@ class App {
                 <div class="monitoring-bar-content in-portfolio">
                     <div class="mon-status">
                         <span class="mon-pulse"></span>
-                        <span class="mon-tag">📌 POSISI AKTIF PORTOFOLIO:</span>
+                        <span class="mon-tag">POSISI AKTIF PORTOFOLIO:</span>
                         <strong class="mon-lots">${lots} Lot <small>(${pos.qty.toLocaleString('id-ID')} lbr)</small></strong>
                         <span class="mon-avg">Avg Beli: Rp ${pos.avgPrice?.toLocaleString('id-ID') || 0}</span>
                     </div>
                     <div class="mon-actions">
                         <button class="btn-mon-action btn-sell-eval" onclick="JournalManager.showAddTradeModal('${sym}', '${price || pos.avgPrice}', 'SELL', '${pos.qty}')">
-                            💰 Jual & Evaluasi P&L
+                            Jual & Evaluasi P&L
                         </button>
                         <button class="btn-mon-action btn-add-buy" onclick="JournalManager.showAddTradeModal('${sym}', '${price || pos.avgPrice}', 'BUY')">
-                            ➕ Beli Tambahan
+                            Beli Tambahan
                         </button>
                         <button class="btn-mon-action btn-to-journal" onclick="window.app?._switchTab('journal')">
-                            ➔ Buka Jurnal & Evaluasi
+                            Buka Jurnal & Evaluasi
                         </button>
                     </div>
                 </div>
@@ -1286,7 +1286,7 @@ class App {
                     </div>
                     <div class="mon-actions">
                         <button class="btn-mon-action btn-add-buy-neon" onclick="JournalManager.showAddTradeModal('${sym}', '${price}', 'BUY')">
-                            📝 Catat Pembelian di Jurnal
+                            Catat Pembelian di Jurnal
                         </button>
                     </div>
                 </div>
@@ -1314,7 +1314,7 @@ class App {
                 if (grid) {
                     grid.innerHTML = `
                         <div class="empty-state" style="grid-column: 1 / -1;">
-                            <span class="empty-state-icon">📋</span>
+                            <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg></span>
                             <span class="empty-state-title">Data fundamental tidak tersedia</span>
                             <span class="empty-state-text">Yahoo Finance tidak menyediakan data fundamental untuk simbol ini. Analisis hanya menggunakan teknikal.</span>
                         </div>
@@ -1341,7 +1341,7 @@ class App {
             if (grid) {
                 grid.innerHTML = `
                     <div class="empty-state" style="grid-column: 1 / -1;">
-                        <span class="empty-state-icon">⚠️</span>
+                        <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg></span>
                         <span class="empty-state-title">Data fundamental tidak tersedia</span>
                         <span class="empty-state-text">Gagal mengambil data dari server</span>
                     </div>
@@ -1384,8 +1384,8 @@ class App {
                 badge.title = `${status.name} — ${status.tradingHours}`;
             }
             if (text) {
-                text.textContent = status.state === 'OPEN' ? '🟢 BUKA' :
-                    status.state === 'PRE_MARKET' ? '🟡 PRE' : '🔴 TUTUP';
+                text.textContent = status.state === 'OPEN' ? '• BUKA' :
+                    status.state === 'PRE_MARKET' ? '• PRE' : '• TUTUP';
             }
 
             // Update night banner
@@ -1535,6 +1535,12 @@ class App {
         this._setText('statMarketCap', this._formatLargeNumber(quote.marketCap ?? 0));
         this._setText('stat52wHigh', fmt(quote.fiftyTwoWeekHigh ?? 0));
         this._setText('stat52wLow', fmt(quote.fiftyTwoWeekLow ?? 0));
+        if (typeof window.OrderbookManager !== 'undefined') {
+            window.OrderbookManager.update(this.currentSymbol, price, quote.volume ?? 0);
+        }
+        if (typeof window.PortfolioManager !== 'undefined') {
+            window.PortfolioManager.updateCurrentStock(this.currentSymbol, price);
+        }
     }
 
     updateSignalPanel(symbol, data, price) {
@@ -1600,10 +1606,10 @@ class App {
         const trendEl = document.getElementById('trendStrengthBadge');
         if (trendEl && result.trendStrength) {
             const trendLabels = {
-                'VERY_STRONG': '🔥 Sangat Kuat',
-                'STRONG': '💪 Kuat',
-                'MODERATE': '〰️ Moderat',
-                'WEAK': '😴 Lemah/Sideways',
+                'VERY_STRONG': 'Sangat Kuat',
+                'STRONG': 'Kuat',
+                'MODERATE': 'Moderat',
+                'WEAK': 'Lemah/Sideways',
                 'UNKNOWN': '— N/A'
             };
             trendEl.textContent = trendLabels[result.trendStrength] || result.trendStrength;
@@ -1690,11 +1696,11 @@ class App {
         }
         if (ratingText) {
             const gradeLabels = {
-                'EXCELLENT': '⭐ Excellent',
-                'GOOD': '✅ Good',
-                'FAIR': '🟡 Fair',
-                'POOR': '🟠 Poor',
-                'VERY_POOR': '🔴 Very Poor',
+                'EXCELLENT': 'Excellent',
+                'GOOD': 'Good',
+                'FAIR': 'Fair',
+                'POOR': 'Poor',
+                'VERY_POOR': 'Very Poor',
                 'N/A': '— N/A',
             };
             ratingText.textContent = gradeLabels[result.grade] || result.grade;
@@ -1720,7 +1726,7 @@ class App {
         } else if (grid && result.metrics.length === 0) {
             grid.innerHTML = `
                 <div class="empty-state" style="grid-column: 1 / -1;">
-                    <span class="empty-state-icon">📋</span>
+                    <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg></span>
                     <span class="empty-state-title">Data fundamental terbatas</span>
                     <span class="empty-state-text">Beberapa metrik mungkin tidak tersedia untuk simbol ini</span>
                 </div>
@@ -1749,22 +1755,22 @@ class App {
         const subSent = document.getElementById('subScoreSentiment');
 
         // Show sub-scores with availability indicator
-        if (subTech) subTech.textContent = `📈 T: ${techScore != null ? techScore : '—'}`;
+        if (subTech) subTech.textContent = `T: ${techScore != null ? techScore : '—'}`;
         if (subFund) {
             if (fundScore != null) {
-                subFund.textContent = `📋 F: ${fundScore}`;
+                subFund.textContent = `F: ${fundScore}`;
                 subFund.style.opacity = '1';
             } else {
-                subFund.textContent = `📋 F: ✗`;
+                subFund.textContent = `F: —`;
                 subFund.style.opacity = '0.4';
             }
         }
         if (subSent) {
             if (sentScore != null) {
-                subSent.textContent = `💬 S: ${sentScore}`;
+                subSent.textContent = `S: ${sentScore}`;
                 subSent.style.opacity = '1';
             } else {
-                subSent.textContent = `💬 S: ✗`;
+                subSent.textContent = `S: —`;
                 subSent.style.opacity = '0.4';
             }
         }
@@ -1838,7 +1844,7 @@ class App {
         if (result.isEmpty) {
             container.innerHTML = `
                 <div class="empty-state">
-                    <span class="empty-state-icon">💬</span>
+                    <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
                     <span class="empty-state-title">Data sentimen tidak tersedia</span>
                     <span class="empty-state-text">Tidak ada berita terbaru untuk dianalisis</span>
                 </div>
@@ -1903,6 +1909,12 @@ class App {
         // Load trading journal & evaluation when journal tab is selected
         if (tabName === 'journal' && typeof window.JournalManager !== 'undefined') {
             window.JournalManager.loadAndRenderJournal();
+        }
+        if (tabName === 'orderbook' && typeof window.OrderbookManager !== 'undefined') {
+            window.OrderbookManager.render();
+        }
+        if (tabName === 'portfolio' && typeof window.PortfolioManager !== 'undefined') {
+            window.PortfolioManager.render();
         }
     }
 
@@ -2064,10 +2076,10 @@ class App {
                     </div>
                     <div class="order-actions">
                         ${canAct ? `
-                            <button class="order-action-btn execute" title="Tandai Tereksekusi" data-action="execute" data-id="${order.id}">✅</button>
-                            <button class="order-action-btn delete" title="Batalkan" data-action="cancel" data-id="${order.id}">❌</button>
+                            <button class="order-action-btn execute" title="Tandai Tereksekusi" data-action="execute" data-id="${order.id}">Eksekusi</button>
+                            <button class="order-action-btn delete" title="Batalkan" data-action="cancel" data-id="${order.id}">Batal</button>
                         ` : `
-                            <button class="order-action-btn delete" title="Hapus" data-action="delete" data-id="${order.id}">🗑</button>
+                            <button class="order-action-btn delete" title="Hapus" data-action="delete" data-id="${order.id}">Hapus</button>
                         `}
                     </div>
                 </div>
