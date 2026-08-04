@@ -1,0 +1,95 @@
+/* stockbit.css - Design system for Stockbit‑style UI */
+
+/* Import Google Font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --color-bg: #0a0f14; /* dark background */
+  --color-surface: #131a22; /* cards */
+  --color-primary: #00b972; /* green accent */
+  --color-muted: #5a6b7c; /* muted text */
+  --color-text: #e0e6ed; /* main text */
+  --radius: 8px;
+  --spacing: 0.75rem;
+  --font-family: 'Inter', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  padding: var(--spacing) var(--spacing);
+  border-radius: var(--radius);
+  font-weight: 500;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+.header, .footer, .sidebar, .main-layout {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: var(--spacing);
+}
+
+/* Card component */
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: var(--spacing);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Grid layout for panels */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing);
+}
+
+/* Chart container */
+.chart-container {
+  width: 100%;
+  height: 350px;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Portfolio & Orderbook */
+.portfolio, .orderbook {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: var(--spacing);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

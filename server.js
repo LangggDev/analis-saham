@@ -12,7 +12,12 @@ import { pool, initDB, ensureDB } from './db.js';
 import midtransClient from 'midtrans-client';
 
 dotenv.config();
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'stockpulse_secret_key_super_secure_2026_jwt_token';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET tidak ditemukan di environment variables! Server tidak bisa dijalankan tanpa secret key.');
+  console.error('   Tambahkan JWT_SECRET=your_secret_key ke file .env');
+  process.exit(1);
+}
 
 // ─── Midtrans Gateway Client Configuration ──────────────────────────────────
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY || 'SB-Mid-server-YOUR_SERVER_KEY_DEFAULT';
@@ -63,7 +68,12 @@ const apiLimiter = rateLimit({
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 app.use('/api/', apiLimiter);
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:5000', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -2478,7 +2488,7 @@ function generateFallbackReasoning(stock) {
 // ─── Autentikasi Middleware (JWT Token Validator) ───────────────────────────
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = (authHeader && authHeader.split(' ')[1]) || req.query.token;
+  const token = authHeader && authHeader.split(' ')[1];
   
   if (!token) {
     return res.status(401).json({ error: 'Akses ditolak: Silakan login terlebih dahulu untuk mengakses fitur ini.' });
@@ -2538,8 +2548,8 @@ function validateRegistrationInput(username, email, password) {
   if (!email || !emailRegex.test(email.trim())) {
     return 'Format alamat email tidak valid.';
   }
-  if (!password || password.length < 8) {
-    return 'Password minimal 8 karakter.';
+  if (!password || password.length < 8 || password.length > 128) {
+    return 'Password harus 8-128 karakter.';
   }
   if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
     return 'Password harus mengombinasikan huruf dan setidaknya 1 angka.';
@@ -2590,7 +2600,7 @@ app.post('/api/auth/register', rateLimitAuth, async (req, res) => {
     res.status(201).json({ message: 'Registrasi berhasil!', token, user });
   } catch (err) {
     console.error('[Auth Register Error]:', err.message);
-    res.status(500).json({ error: 'Gagal mendaftar akun: ' + err.message });
+    res.status(500).json({ error: 'Gagal mendaftar akun. Silakan coba lagi nanti.' });
   }
 });
 
@@ -2635,7 +2645,7 @@ app.post('/api/auth/login', rateLimitAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Auth Login Error]:', err.message);
-    res.status(500).json({ error: 'Gagal melakukan login: ' + err.message });
+    res.status(500).json({ error: 'Gagal melakukan login. Silakan coba lagi nanti.' });
   }
 });
 
@@ -2741,7 +2751,7 @@ app.post('/api/payment/checkout', authenticateToken, async (req, res) => {
     });
   } catch (err) {
     console.error('❌ [Checkout Error]:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Terjadi kesalahan saat memproses checkout. Silakan coba lagi.' });
   }
 });
 
@@ -2756,7 +2766,7 @@ app.post('/api/payment/webhook', async (req, res) => {
     let transactionStatus = notification.transaction_status;
     let fraudStatus = notification.fraud_status;
 
-    // Verifikasi keaslian payload menggunakan SDK
+    // Verifikasi keaslian payload menggunakan SDK — WAJIB untuk keamanan pembayaran
     if (coreApiClient && MIDTRANS_SERVER_KEY && !MIDTRANS_SERVER_KEY.includes('YOUR_SERVER_KEY_DEFAULT')) {
       try {
         const statusResponse = await coreApiClient.transaction.notification(notification);
@@ -2764,8 +2774,13 @@ app.post('/api/payment/webhook', async (req, res) => {
         transactionStatus = statusResponse.transaction_status;
         fraudStatus = statusResponse.fraud_status;
       } catch (sdkErr) {
-        console.warn('⚠️ [Webhook SDK Verify Warning]:', sdkErr.message);
+        console.error('❌ [Webhook] Signature verification GAGAL:', sdkErr.message);
+        return res.status(403).json({ error: 'Webhook verification failed' });
       }
+    } else {
+      // Tanpa SDK key terkonfigurasi, tolak semua webhook demi keamanan
+      console.warn('⚠️ [Webhook] Midtrans server key belum dikonfigurasi, webhook diabaikan.');
+      return res.status(200).json({ status: 'IGNORED', reason: 'No server key configured' });
     }
 
     let orderStatus = 'PENDING';
@@ -2798,7 +2813,7 @@ app.post('/api/payment/webhook', async (req, res) => {
     res.status(200).json({ status: 'OK', processed_status: orderStatus });
   } catch (err) {
     console.error('❌ [Midtrans Webhook Error]:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Terjadi kesalahan saat memproses notifikasi pembayaran.' });
   }
 });
 
@@ -2824,12 +2839,23 @@ app.post('/api/payment/confirm', authenticateToken, async (req, res) => {
   await ensureDB();
   try {
     const { orderId } = req.body;
-    // Jika orderId diset, mark PAID di app_orders juga
-    if (orderId) {
-      await pool.query('UPDATE app_orders SET status = $1, updated_at = NOW() WHERE order_id = $2 AND user_id = $3', ['PAID', orderId, req.user.id]);
+    if (!orderId) {
+      return res.status(400).json({ error: 'Order ID wajib disertakan.' });
     }
 
-    // Verifikasi instan (Untuk simulasi atau konfirmasi manual dari modal simulasi)
+    // SECURITY: Cek apakah order ini memang sudah berstatus PAID (dari webhook Midtrans yang terverifikasi)
+    const orderCheck = await pool.query(
+      'SELECT status FROM app_orders WHERE order_id = $1 AND user_id = $2',
+      [orderId, req.user.id]
+    );
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Order tidak ditemukan.' });
+    }
+    if (orderCheck.rows[0].status !== 'PAID') {
+      return res.status(403).json({ error: 'Pembayaran belum terverifikasi oleh sistem. Silakan selesaikan pembayaran terlebih dahulu.' });
+    }
+
+    // Order sudah PAID dari webhook — aktifkan PRO Member
     const expiresDate = new Date();
     expiresDate.setDate(expiresDate.getDate() + 30); // 30 hari akses PRO
 
@@ -2845,7 +2871,8 @@ app.post('/api/payment/confirm', authenticateToken, async (req, res) => {
       expiresAt: expiresDate.toISOString()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Payment Confirm Error]:', err.message);
+    res.status(500).json({ error: 'Terjadi kesalahan saat mengonfirmasi pembayaran.' });
   }
 });
 
@@ -2957,6 +2984,9 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
   }
   const cleanSymbol = symbol.trim().toUpperCase();
   const txType = type.trim().toUpperCase();
+  if (!['BUY', 'SELL'].includes(txType)) {
+    return res.status(400).json({ error: 'Tipe transaksi hanya boleh BUY atau SELL.' });
+  }
   const numPrice = Number(price);
   const numQty = Number(quantity);
   const totalVal = numPrice * numQty;
@@ -3000,7 +3030,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
     res.status(201).json({ message: 'Transaksi berhasil dicatat!', transaction: insertRes.rows[0] });
   } catch (err) {
     console.error('[Transactions POST Error]:', err.message);
-    res.status(500).json({ error: 'Gagal mencatat transaksi: ' + err.message });
+    res.status(500).json({ error: 'Gagal mencatat transaksi. Silakan coba lagi.' });
   }
 });
 
@@ -3047,7 +3077,7 @@ app.get('/api/transactions/export', authenticateToken, async (req, res) => {
     res.send(csv);
   } catch (err) {
     console.error('[Export Report Error]:', err.message);
-    res.status(500).json({ error: 'Gagal mengunduh laporan evaluasi: ' + err.message });
+    res.status(500).json({ error: 'Gagal mengunduh laporan evaluasi. Silakan coba lagi.' });
   }
 });
 
