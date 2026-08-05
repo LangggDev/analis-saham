@@ -1079,9 +1079,18 @@ class App {
         // Mobile Watchlist & Right Panel Toggle
         const mobileWatchlistBtn = document.getElementById('mobileWatchlistBtn');
         const mobileTradeBtn = document.getElementById('mobileTradeBtn');
+        const mobileHomeBtn = document.getElementById('mobileHomeBtn');
         const sidebarBackdrop = document.getElementById('sidebarBackdrop');
         const sidebar = document.getElementById('sidebar');
         const rightPanel = document.getElementById('rightPanel');
+
+        const updateBottomNavState = () => {
+            const isWatchlistOpen = sidebar && (sidebar.classList.contains('active') || sidebar.classList.contains('open'));
+            const isTradeOpen = rightPanel && rightPanel.classList.contains('open');
+            if (mobileWatchlistBtn) mobileWatchlistBtn.classList.toggle('active', isWatchlistOpen);
+            if (mobileTradeBtn) mobileTradeBtn.classList.toggle('active', isTradeOpen);
+            if (mobileHomeBtn) mobileHomeBtn.classList.toggle('active', !isWatchlistOpen && !isTradeOpen);
+        };
 
         const toggleMobileSidebar = (show) => {
             if (!sidebar) return;
@@ -1090,6 +1099,7 @@ class App {
             sidebar.classList.toggle('active', shouldShow);
             sidebar.classList.toggle('open', shouldShow);
             if (sidebarBackdrop) sidebarBackdrop.classList.toggle('active', shouldShow);
+            updateBottomNavState();
         };
 
         const toggleMobileRightPanel = (show) => {
@@ -1101,6 +1111,7 @@ class App {
             const shouldShow = show !== undefined ? show : (!rightPanel.classList.contains('open'));
             rightPanel.classList.toggle('open', shouldShow);
             if (sidebarBackdrop) sidebarBackdrop.classList.toggle('active', shouldShow);
+            updateBottomNavState();
         };
 
         if (mobileWatchlistBtn) {
@@ -1108,6 +1119,12 @@ class App {
         }
         if (mobileTradeBtn) {
             mobileTradeBtn.addEventListener('click', () => toggleMobileRightPanel());
+        }
+        if (mobileHomeBtn) {
+            mobileHomeBtn.addEventListener('click', () => {
+                toggleMobileSidebar(false);
+                toggleMobileRightPanel(false);
+            });
         }
         if (sidebarBackdrop) {
             sidebarBackdrop.addEventListener('click', () => {
@@ -1193,11 +1210,23 @@ class App {
     async loadSymbol(symbol) {
         this.currentSymbol = symbol;
 
-        // Auto-close mobile sidebar drawer
+        // Auto-close mobile sidebar drawer & reset bottom nav
         const sidebar = document.getElementById('sidebar');
+        const rightPanel = document.getElementById('rightPanel');
         const sidebarBackdrop = document.getElementById('sidebarBackdrop');
-        if (sidebar) sidebar.classList.remove('active');
+        if (sidebar) {
+            sidebar.classList.remove('active');
+            sidebar.classList.remove('open');
+        }
+        if (rightPanel) rightPanel.classList.remove('open');
         if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+
+        const mobileWatchlistBtn = document.getElementById('mobileWatchlistBtn');
+        const mobileTradeBtn = document.getElementById('mobileTradeBtn');
+        const mobileHomeBtn = document.getElementById('mobileHomeBtn');
+        if (mobileWatchlistBtn) mobileWatchlistBtn.classList.remove('active');
+        if (mobileTradeBtn) mobileTradeBtn.classList.remove('active');
+        if (mobileHomeBtn) mobileHomeBtn.classList.add('active');
 
         // Update chart
         await this.tvChart.changeSymbol(symbol);

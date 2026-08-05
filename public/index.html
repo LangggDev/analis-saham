@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,14 +21,6 @@
         <!-- Header — Compact Stockbit Style -->
         <header id="header" class="header" role="banner">
             <div class="header-left">
-                <button id="mobileWatchlistBtn" class="mobile-watchlist-btn" title="Buka Watchlist" aria-label="Buka Watchlist">
-                    <span class="mobile-btn-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></span>
-                    <span class="mobile-btn-text">Watchlist</span>
-                </button>
-                <button id="mobileTradeBtn" class="mobile-watchlist-btn" title="Buka Orderbook & Trading" aria-label="Buka Orderbook dan Trading">
-                    <span class="mobile-btn-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span>
-                    <span class="mobile-btn-text">Order / Trade</span>
-                </button>
                 <div class="logo">
                     <span class="logo-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00b972" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>
                     <h1>Stock<span class="logo-accent">Pulse</span></h1>
@@ -664,5 +656,21 @@
             </div>
         </div>
     </div>
+
+    <!-- Sticky Bottom Navigation for Mobile (< 1024px) -->
+    <nav id="mobileBottomNav" class="mobile-bottom-nav" role="navigation" aria-label="Navigasi Bawah Mobile">
+        <button id="mobileWatchlistBtn" class="mobile-nav-item" title="Watchlist Saham">
+            <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></span>
+            <span class="nav-label">Watchlist</span>
+        </button>
+        <button id="mobileHomeBtn" class="mobile-nav-item active" title="Terminal Analisis">
+            <span class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>
+            <span class="nav-label">Terminal</span>
+        </button>
+        <button id="mobileTradeBtn" class="mobile-nav-item" title="Orderbook & Trading">
+            <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span>
+            <span class="nav-label">Order / Trade</span>
+        </button>
+    </nav>
 </body>
 </html>
