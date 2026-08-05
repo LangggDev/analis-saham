@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StockPulse — Real-Time Stock Analysis Dashboard</title>
     <meta name="description" content="Professional real-time stock analysis dashboard with technical indicators, fundamental analysis, pre-order system, and trading signals">
-    <meta name="theme-color" content="#07090e">
+    <meta name="theme-color" content="#131722">
     <meta name="color-scheme" content="dark">
     <link rel="icon" href="/img/logo.svg">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <script type="text/javascript" src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -18,15 +18,19 @@
     <!-- App Container -->
     <div id="app" class="app-container">
         
-        <!-- Header -->
+        <!-- Header — Compact Stockbit Style -->
         <header id="header" class="header" role="banner">
             <div class="header-left">
                 <button id="mobileWatchlistBtn" class="mobile-watchlist-btn" title="Buka Watchlist" aria-label="Buka Watchlist">
                     <span class="mobile-btn-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></span>
                     <span class="mobile-btn-text">Watchlist</span>
                 </button>
+                <button id="mobileTradeBtn" class="mobile-watchlist-btn" title="Buka Orderbook & Trading" aria-label="Buka Orderbook dan Trading">
+                    <span class="mobile-btn-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span>
+                    <span class="mobile-btn-text">Order / Trade</span>
+                </button>
                 <div class="logo">
-                    <span class="logo-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00b972" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>
+                    <span class="logo-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00b972" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span>
                     <h1>Stock<span class="logo-accent">Pulse</span></h1>
                 </div>
             </div>
@@ -34,7 +38,7 @@
             <div class="header-center">
                 <div class="search-container" id="searchContainer" role="search">
                     <div class="search-input-wrapper">
-                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
@@ -46,12 +50,13 @@
             </div>
 
             <div class="header-right">
-                <!-- Market Status Indicator -->
+                <!-- Market Status -->
                 <div class="market-status-badge" id="marketStatusBadge" title="Status pasar">
                     <span class="market-status-dot" id="marketStatusDot"></span>
-                    <span class="market-status-text" id="marketStatusText">—</span>
+                    <span class="market-status-text" id="marketStatusText">--</span>
                 </div>
 
+                <!-- Timeframe buttons (hidden on desktop, moved to chart area) -->
                 <nav class="timeframe-buttons" id="timeframeButtons" role="group" aria-label="Pilihan timeframe chart">
                     <button class="tf-btn" data-interval="1m" id="tf-1m" aria-pressed="false">1m</button>
                     <button class="tf-btn" data-interval="5m" id="tf-5m" aria-pressed="false">5m</button>
@@ -62,9 +67,7 @@
                     <button class="tf-btn" data-interval="1mo" id="tf-1mo" aria-pressed="false">1M</button>
                 </nav>
 
-
-
-                <button id="themeToggleBtn" class="btn-icon theme-toggle-btn" title="Mode Otomatis Jam: Light (06:00-17:59) / Dark (18:00-05:59)">
+                <button id="themeToggleBtn" class="btn-icon theme-toggle-btn" title="Toggle Light/Dark Mode">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="theme-icon"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                 </button>
                 <button id="notifBellBtn" class="btn-icon notif-bell" title="Notifikasi Sinyal" aria-label="Toggle notifikasi">
@@ -76,7 +79,7 @@
                 </button>
                 <button id="btnAuthToggle" class="btn-auth-neon" title="Login / Profil Akun">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                    <span>Login / Register</span>
+                    <span>Login</span>
                 </button>
                 <div class="connection-status" id="connectionStatus" role="status" aria-live="polite">
                     <span class="status-dot" aria-hidden="true"></span>
@@ -85,13 +88,13 @@
             </div>
         </header>
 
-        <!-- Main Layout (Stock) -->
+        <!-- Main 3-Column Layout -->
         <div class="main-layout" id="stockLayout">
             
             <!-- Mobile Backdrop -->
             <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
 
-            <!-- Sidebar: Watchlist -->
+            <!-- LEFT PANEL: Watchlist -->
             <aside id="sidebar" class="sidebar" role="complementary" aria-label="Watchlist saham">
                 <div class="sidebar-header">
                     <h2>Watchlist</h2>
@@ -107,7 +110,7 @@
                 </ul>
             </aside>
 
-            <!-- Content Area -->
+            <!-- CENTER: Chart + Tabs + Panels -->
             <main class="content" role="main">
                 <!-- Symbol Header -->
                 <div id="symbolHeader" class="symbol-header">
@@ -125,14 +128,14 @@
                 <!-- Quick Portfolio Monitoring & Journal Action Bar -->
                 <div class="quick-monitoring-bar" id="quickMonitoringBar" style="display:none;"></div>
 
-                <!-- Combined Score Bar (Technical + Fundamental) -->
+                <!-- Combined Score Bar -->
                 <div class="combined-score-bar" id="combinedScoreBar">
                     <div class="combined-score-left">
                         <div class="combined-score-label">
                             <span class="combined-icon"></span>
                             <span>Skor Gabungan</span>
                         </div>
-                        <div class="combined-score-value" id="combinedScoreValue">—</div>
+                        <div class="combined-score-value" id="combinedScoreValue">--</div>
                     </div>
                     <div class="combined-score-gauge">
                         <div class="combined-gauge-track">
@@ -147,18 +150,18 @@
                     <div class="combined-score-right">
                         <div class="combined-signal-badge" id="combinedSignalBadge">NEUTRAL</div>
                         <div class="combined-sub-scores">
-                            <span class="sub-score" id="subScoreTechnical" title="Skor Teknikal">Teknikal: —</span>
-                            <span class="sub-score" id="subScoreFundamental" title="Skor Fundamental">Fundamental: —</span>
-                            <span class="sub-score" id="subScoreSentiment" title="Skor Sentimen">Sentimen: —</span>
+                            <span class="sub-score" id="subScoreTechnical" title="Skor Teknikal">Teknikal: --</span>
+                            <span class="sub-score" id="subScoreFundamental" title="Skor Fundamental">Fundamental: --</span>
+                            <span class="sub-score" id="subScoreSentiment" title="Skor Sentimen">Sentimen: --</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Chart Header Bar with Mode Toggle -->
+                <!-- Chart Header Bar -->
                 <div class="chart-header-bar">
                     <div class="chart-mode-toggle" id="chartModeToggle">
-                        <button class="chart-mode-btn active" data-mode="tv" id="chartModeTvBtn">TradingView Original Widget</button>
-                        <button class="chart-mode-btn" data-mode="custom" id="chartModeCustomBtn">Custom Pro Chart</button>
+                        <button class="chart-mode-btn active" data-mode="tv" id="chartModeTvBtn">TradingView</button>
+                        <button class="chart-mode-btn" data-mode="custom" id="chartModeCustomBtn">Custom Chart</button>
                     </div>
                     <div class="chart-status-tag" id="chartStatusTag">
                         <span class="status-pulse-dot"></span>
@@ -166,7 +169,7 @@
                     </div>
                 </div>
 
-                <!-- Real-Time OHLCV Chart Containers -->
+                <!-- Chart Containers -->
                 <div id="chartContainer" class="chart-container">
                     <div id="tradingview_widget_wrap" class="chart-viewport active"></div>
                     <div id="custom_chart_wrap" class="chart-viewport"></div>
@@ -174,30 +177,16 @@
 
                 <!-- Indicator Info Bar -->
                 <div class="indicator-info-bar" id="indicatorInfoBar">
-                    <div class="info-tag">
-                        <span>Real-Time Chart</span>
-                    </div>
-                    <div class="info-tag">
-                        <span>OHLCV + Volume · Data langsung dari server</span>
-                    </div>
-                    <div class="info-tag">
-                        <span>Auto-update setiap 15 detik</span>
-                    </div>
+                    <div class="info-tag"><span>Real-Time Chart</span></div>
+                    <div class="info-tag"><span>OHLCV + Volume</span></div>
+                    <div class="info-tag"><span>Auto-update 15s</span></div>
                 </div>
 
-                <!-- Tab Navigation for Bottom Panels -->
+                <!-- Tab Navigation — Pill Style (WITHOUT Orderbook & Portfolio, moved to right panel) -->
                 <div class="panel-tabs" id="panelTabs" role="tablist" aria-label="Panel navigation">
                     <button class="panel-tab active" data-tab="quote" role="tab" aria-selected="true" id="tab-quote">
                         <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
                         <span class="tab-label">Detail Harga</span>
-                    </button>
-                    <button class="panel-tab" data-tab="orderbook" role="tab" aria-selected="false" id="tab-orderbook">
-                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span>
-                        <span class="tab-label">Orderbook</span>
-                    </button>
-                    <button class="panel-tab" data-tab="portfolio" role="tab" aria-selected="false" id="tab-portfolio">
-                        <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg></span>
-                        <span class="tab-label">Portofolio & Order</span>
                     </button>
                     <button class="panel-tab" data-tab="fundamental" role="tab" aria-selected="false" id="tab-fundamental">
                         <span class="tab-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span>
@@ -227,7 +216,7 @@
                     </button>
                 </div>
 
-                <!-- Bottom Panels -->
+                <!-- Bottom Panels (Tab Content) -->
                 <div class="bottom-panels-tabbed">
 
                     <!-- Quote Details Panel -->
@@ -236,161 +225,35 @@
                             <div class="stats-grid" id="statsGrid">
                                 <div class="stat-item" id="stat-open">
                                     <span class="stat-label">Open</span>
-                                    <span class="stat-value mono" id="statOpen">—</span>
+                                    <span class="stat-value mono" id="statOpen">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-high">
                                     <span class="stat-label">High</span>
-                                    <span class="stat-value mono" id="statHigh">—</span>
+                                    <span class="stat-value mono" id="statHigh">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-low">
                                     <span class="stat-label">Low</span>
-                                    <span class="stat-value mono" id="statLow">—</span>
+                                    <span class="stat-value mono" id="statLow">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-prevclose">
                                     <span class="stat-label">Prev Close</span>
-                                    <span class="stat-value mono" id="statPrevClose">—</span>
+                                    <span class="stat-value mono" id="statPrevClose">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-volume">
                                     <span class="stat-label">Volume</span>
-                                    <span class="stat-value mono" id="statVolume">—</span>
+                                    <span class="stat-value mono" id="statVolume">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-marketcap">
                                     <span class="stat-label">Market Cap</span>
-                                    <span class="stat-value mono" id="statMarketCap">—</span>
+                                    <span class="stat-value mono" id="statMarketCap">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-52whigh">
                                     <span class="stat-label">52W High</span>
-                                    <span class="stat-value mono" id="stat52wHigh">—</span>
+                                    <span class="stat-value mono" id="stat52wHigh">--</span>
                                 </div>
                                 <div class="stat-item" id="stat-52wlow">
                                     <span class="stat-label">52W Low</span>
-                                    <span class="stat-value mono" id="stat52wLow">—</span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Orderbook & Market Depth Panel -->
-                    <section class="tab-panel" data-panel="orderbook" id="panel-orderbook" role="tabpanel" aria-label="Orderbook dan Market Depth">
-                        <div class="panel-body orderbook-panel">
-                            <div class="orderbook-header">
-                                <h3 class="orderbook-title">Orderbook (Bid & Offer)</h3>
-                                <div class="orderbook-stats">
-                                    <span class="ob-stat-tag">Lot Size: 100 Lembar</span>
-                                    <span class="ob-stat-tag">Status: Live Depth</span>
-                                </div>
-                            </div>
-                            <!-- Bid / Offer Total Volume Gauge -->
-                            <div class="ob-depth-bar">
-                                <div class="ob-depth-bid" id="obTotalBidBar" style="width: 55%;">Bid: <span id="obTotalBidText">0 Lot</span></div>
-                                <div class="ob-depth-offer" id="obTotalOfferBar" style="width: 45%;">Offer: <span id="obTotalOfferText">0 Lot</span></div>
-                            </div>
-                            <!-- 10-Level Orderbook Table -->
-                            <div class="orderbook-table-container">
-                                <table class="orderbook-table">
-                                    <thead>
-                                        <tr>
-                                            <th class="text-left">Bid Lot</th>
-                                            <th class="text-center">Bid Price</th>
-                                            <th class="text-center">Offer Price</th>
-                                            <th class="text-right">Offer Lot</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="orderbookBody">
-                                        <tr><td colspan="4" class="text-center text-muted py-4">Memuat data orderbook saham...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <!-- Bandarology / Broker Action Summary -->
-                            <div class="broker-summary-box">
-                                <h4>Ringkasan Bandarology (Intraday Flow)</h4>
-                                <div class="broker-grid" id="brokerSummaryGrid">
-                                    <div class="broker-item"><span>Top Buyer:</span> <strong id="topBuyerCode">YP, ZP, CC</strong> (<span class="text-green">Akumulasi</span>)</div>
-                                    <div class="broker-item"><span>Top Seller:</span> <strong id="topSellerCode">PD, NI, MG</strong></div>
-                                    <div class="broker-item"><span>Net Foreign Flow:</span> <strong class="text-green" id="netForeignFlow">+ Rp 24.5 M</strong></div>
-                                    <div class="broker-item"><span>Bandar Volume:</span> <strong class="text-green" id="bandarVolumeStatus">BIG ACCUMULATION</strong></div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Portofolio & Trading Panel -->
-                    <section class="tab-panel" data-panel="portfolio" id="panel-portfolio" role="tabpanel" aria-label="Portofolio dan Order Trading">
-                        <div class="panel-body portfolio-panel">
-                            <div class="portfolio-grid">
-                                <!-- Account Summary Left Card -->
-                                <div class="portfolio-account-box">
-                                    <h3 class="portfolio-title">Akun Trading Virtual</h3>
-                                    <div class="acc-balance-total">
-                                        <span class="acc-label">Total Nilai Aset</span>
-                                        <h2 class="acc-value mono" id="portTotalAsset">Rp 100,000,000</h2>
-                                    </div>
-                                    <div class="acc-sub-metrics">
-                                        <div class="acc-metric">
-                                            <span>Cash Tersedia</span>
-                                            <strong class="mono" id="portCashAvailable">Rp 100,000,000</strong>
-                                        </div>
-                                        <div class="acc-metric">
-                                            <span>Modal Terinvestasi</span>
-                                            <strong class="mono" id="portInvested">Rp 0</strong>
-                                        </div>
-                                        <div class="acc-metric">
-                                            <span>Floating Profit / Loss</span>
-                                            <strong class="mono text-green" id="portFloatingPL">Rp 0 (0.00%)</strong>
-                                        </div>
-                                    </div>
-                                    <button class="btn-screener-action mt-3" id="btnResetPortfolio">Reset Akun 100 Jt</button>
-                                </div>
-
-                                <!-- Order Execution Right Card -->
-                                <div class="portfolio-order-box">
-                                    <h3 class="portfolio-title">Form Order (Stockbit Trading Engine)</h3>
-                                    <div class="order-form">
-                                        <div class="order-field-group">
-                                            <label>Saham Pilihan</label>
-                                            <input type="text" id="orderSymbolInput" readonly value="BBRI.JK" class="order-input font-bold">
-                                        </div>
-                                        <div class="order-field-group">
-                                            <label>Harga Order (<span id="orderPriceLabel">Limit</span>)</label>
-                                            <input type="number" id="orderPriceInput" value="4520" step="5" class="order-input">
-                                        </div>
-                                        <div class="order-field-group">
-                                            <label>Jumlah Lot (1 Lot = 100 Lembar)</label>
-                                            <input type="number" id="orderLotInput" value="10" min="1" step="1" class="order-input">
-                                        </div>
-                                        <div class="order-total-display">
-                                            <span>Est. Nilai Order:</span>
-                                            <strong class="mono" id="orderEstValue">Rp 4,520,000</strong>
-                                        </div>
-                                        <div class="order-buttons">
-                                            <button class="btn-order-buy" id="btnExecuteBuy">BUY</button>
-                                            <button class="btn-order-sell" id="btnExecuteSell">SELL</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Holdings Table -->
-                            <div class="holdings-section mt-4">
-                                <h4 class="holdings-title">Daftar Kepemilikan Saham (Holdings)</h4>
-                                <div class="screener-table-container">
-                                    <table class="screener-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Kode Saham</th>
-                                                <th>Avg Price</th>
-                                                <th>Harga Live</th>
-                                                <th>Total Lot</th>
-                                                <th>Nilai Pasar</th>
-                                                <th>Floating P/L (Rp)</th>
-                                                <th>P/L (%)</th>
-                                                <th>Aksi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="holdingsTableBody">
-                                            <tr><td colspan="8" class="text-center text-muted py-4">Belum ada posisi saham aktif. Mulai trading di menu Form Order!</td></tr>
-                                        </tbody>
-                                    </table>
+                                    <span class="stat-value mono" id="stat52wLow">--</span>
                                 </div>
                             </div>
                         </div>
@@ -399,37 +262,29 @@
                     <!-- Fundamental Analysis Panel -->
                     <section class="tab-panel" data-panel="fundamental" id="panel-fundamental" role="tabpanel" aria-label="Analisis fundamental">
                         <div class="panel-body">
-                            <!-- Fundamental Rating -->
                             <div class="fundamental-header">
                                 <div class="fundamental-rating-badge" id="fundamentalRatingBadge">
                                     <span class="rating-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg></span>
-                                    <span class="rating-text" id="fundamentalRatingText">—</span>
+                                    <span class="rating-text" id="fundamentalRatingText">--</span>
                                 </div>
                                 <div class="fundamental-score-display">
                                     <span class="fund-score-label">Skor Fundamental</span>
-                                    <span class="fund-score-value mono" id="fundamentalScoreValue">—</span>
+                                    <span class="fund-score-value mono" id="fundamentalScoreValue">--</span>
                                 </div>
                             </div>
-
-                            <!-- Fundamental Metrics Grid -->
                             <div class="fundamental-metrics-grid" id="fundamentalMetricsGrid">
-                                <!-- Dynamically populated -->
                                 <div class="empty-state" id="fundamentalEmptyState">
                                     <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg></span>
                                     <span class="empty-state-title">Memuat data fundamental...</span>
                                     <span class="empty-state-text">Data akan tampil setelah memilih saham</span>
                                 </div>
                             </div>
-
-                            <!-- Recommendation -->
                             <div class="fundamental-recommendation" id="fundamentalRecommendation" style="display:none;">
                                 <div class="recommendation-title">Rekomendasi</div>
                                 <div class="recommendation-text" id="fundamentalRecText"></div>
                             </div>
                         </div>
                     </section>
-
-
 
                     <!-- Signal Panel -->
                     <section class="tab-panel" data-panel="signal" id="panel-signal" role="tabpanel" aria-label="Sinyal trading">
@@ -440,45 +295,18 @@
                             </div>
                             <div class="trend-strength-row">
                                 <span class="trend-strength-label">Kekuatan Trend:</span>
-                                <span class="trend-strength-badge" id="trendStrengthBadge">— N/A</span>
+                                <span class="trend-strength-badge" id="trendStrengthBadge">-- N/A</span>
                             </div>
                             <div id="signalDetails" class="signal-details">
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">SMA</span>
-                                    <span class="signal-detail-value neutral" id="signalSma">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">EMA</span>
-                                    <span class="signal-detail-value neutral" id="signalEma">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">RSI</span>
-                                    <span class="signal-detail-value neutral" id="signalRsi">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">MACD</span>
-                                    <span class="signal-detail-value neutral" id="signalMacd">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">BB</span>
-                                    <span class="signal-detail-value neutral" id="signalBb">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">VOL</span>
-                                    <span class="signal-detail-value neutral" id="signalVol">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">STOCH</span>
-                                    <span class="signal-detail-value neutral" id="signalStoch">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">ADX</span>
-                                    <span class="signal-detail-value neutral" id="signalAdx">NEUTRAL</span>
-                                </div>
-                                <div class="signal-detail-item">
-                                    <span class="signal-detail-name">CROSS</span>
-                                    <span class="signal-detail-value neutral" id="signalCross">NEUTRAL</span>
-                                </div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">SMA</span><span class="signal-detail-value neutral" id="signalSma">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">EMA</span><span class="signal-detail-value neutral" id="signalEma">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">RSI</span><span class="signal-detail-value neutral" id="signalRsi">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">MACD</span><span class="signal-detail-value neutral" id="signalMacd">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">BB</span><span class="signal-detail-value neutral" id="signalBb">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">VOL</span><span class="signal-detail-value neutral" id="signalVol">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">STOCH</span><span class="signal-detail-value neutral" id="signalStoch">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">ADX</span><span class="signal-detail-value neutral" id="signalAdx">NEUTRAL</span></div>
+                                <div class="signal-detail-item"><span class="signal-detail-name">CROSS</span><span class="signal-detail-value neutral" id="signalCross">NEUTRAL</span></div>
                             </div>
                         </div>
 
@@ -489,49 +317,17 @@
                                 <span class="pe-confidence-badge conf-medium" id="peConfidence">MEDIUM</span>
                             </div>
                             <div class="pe-grid">
-                                <div class="pe-item pe-item-time">
-                                    <span class="pe-icon"></span>
-                                    <span class="pe-label">Est. Waktu</span>
-                                    <span class="pe-value" id="peTimeEstimate">—</span>
-                                </div>
-                                <div class="pe-item pe-item-profit">
-                                    <span class="pe-icon"></span>
-                                    <span class="pe-label">Profit Target</span>
-                                    <span class="pe-value rec-profit-pct" id="peProfitPercent">—</span>
-                                </div>
-                                <div class="pe-item pe-item-loss">
-                                    <span class="pe-icon"></span>
-                                    <span class="pe-label">Max Loss</span>
-                                    <span class="pe-value rec-loss-pct" id="peLossPercent">—</span>
-                                </div>
-                                <div class="pe-item pe-item-rrr">
-                                    <span class="pe-icon"></span>
-                                    <span class="pe-label">Risk:Reward</span>
-                                    <span class="pe-value" id="peRRR">—</span>
-                                </div>
-                                <div class="pe-item pe-item-wp">
-                                    <span class="pe-icon"></span>
-                                    <span class="pe-label">Win Prob</span>
-                                    <span class="pe-value" id="peWinProb">—</span>
-                                </div>
-                                <div class="pe-item pe-item-ppd">
-                                    <span class="pe-icon"></span>
-                                    <span class="pe-label">Profit/Hari</span>
-                                    <span class="pe-value" id="peProfitPerDay">—</span>
-                                </div>
+                                <div class="pe-item pe-item-time"><span class="pe-icon"></span><span class="pe-label">Est. Waktu</span><span class="pe-value" id="peTimeEstimate">--</span></div>
+                                <div class="pe-item pe-item-profit"><span class="pe-icon"></span><span class="pe-label">Profit Target</span><span class="pe-value rec-profit-pct" id="peProfitPercent">--</span></div>
+                                <div class="pe-item pe-item-loss"><span class="pe-icon"></span><span class="pe-label">Max Loss</span><span class="pe-value rec-loss-pct" id="peLossPercent">--</span></div>
+                                <div class="pe-item pe-item-rrr"><span class="pe-icon"></span><span class="pe-label">Risk:Reward</span><span class="pe-value" id="peRRR">--</span></div>
+                                <div class="pe-item pe-item-wp"><span class="pe-icon"></span><span class="pe-label">Win Prob</span><span class="pe-value" id="peWinProb">--</span></div>
+                                <div class="pe-item pe-item-ppd"><span class="pe-icon"></span><span class="pe-label">Profit/Hari</span><span class="pe-value" id="peProfitPerDay">--</span></div>
                             </div>
                             <div class="pe-bar-section">
-                                <div class="pe-bar-labels">
-                                    <span>SL: <strong id="peStopLoss">—</strong></span>
-                                    <span>Win Probability</span>
-                                    <span>TP: <strong id="peTakeProfit">—</strong></span>
-                                </div>
-                                <div class="pe-bar">
-                                    <div class="pe-bar-fill wp-medium" id="peWinProbFill" style="width: 50%"></div>
-                                </div>
-                                <div class="pe-bar-labels">
-                                    <span>ATR: <span id="peATRPercent">—</span></span>
-                                </div>
+                                <div class="pe-bar-labels"><span>SL: <strong id="peStopLoss">--</strong></span><span>Win Probability</span><span>TP: <strong id="peTakeProfit">--</strong></span></div>
+                                <div class="pe-bar"><div class="pe-bar-fill wp-medium" id="peWinProbFill" style="width: 50%"></div></div>
+                                <div class="pe-bar-labels"><span>ATR: <span id="peATRPercent">--</span></span></div>
                             </div>
                         </div>
 
@@ -539,18 +335,16 @@
                         <div class="fib-panel" id="fibonacciPanel" style="display:none;">
                             <h4 class="fib-title">Fibonacci Retracement</h4>
                             <div class="fib-levels">
-                                <div class="fib-level fib-0"><span class="fib-label">0% (High)</span><span class="fib-value" id="fibLevel0">—</span></div>
-                                <div class="fib-level fib-236"><span class="fib-label">23.6%</span><span class="fib-value" id="fibLevel236">—</span></div>
-                                <div class="fib-level fib-382"><span class="fib-label">38.2%</span><span class="fib-value" id="fibLevel382">—</span></div>
-                                <div class="fib-level fib-500"><span class="fib-label">50.0%</span><span class="fib-value" id="fibLevel500">—</span></div>
-                                <div class="fib-level fib-618"><span class="fib-label">61.8%</span><span class="fib-value" id="fibLevel618">—</span></div>
-                                <div class="fib-level fib-786"><span class="fib-label">78.6%</span><span class="fib-value" id="fibLevel786">—</span></div>
-                                <div class="fib-level fib-1"><span class="fib-label">100% (Low)</span><span class="fib-value" id="fibLevel1">—</span></div>
+                                <div class="fib-level fib-0"><span class="fib-label">0% (High)</span><span class="fib-value" id="fibLevel0">--</span></div>
+                                <div class="fib-level fib-236"><span class="fib-label">23.6%</span><span class="fib-value" id="fibLevel236">--</span></div>
+                                <div class="fib-level fib-382"><span class="fib-label">38.2%</span><span class="fib-value" id="fibLevel382">--</span></div>
+                                <div class="fib-level fib-500"><span class="fib-label">50.0%</span><span class="fib-value" id="fibLevel500">--</span></div>
+                                <div class="fib-level fib-618"><span class="fib-label">61.8%</span><span class="fib-value" id="fibLevel618">--</span></div>
+                                <div class="fib-level fib-786"><span class="fib-label">78.6%</span><span class="fib-value" id="fibLevel786">--</span></div>
+                                <div class="fib-level fib-1"><span class="fib-label">100% (Low)</span><span class="fib-value" id="fibLevel1">--</span></div>
                             </div>
                         </div>
                     </section>
-
-
 
                     <!-- Sentiment Panel -->
                     <section class="tab-panel" data-panel="sentiment" id="panel-sentiment" role="tabpanel" aria-label="Analisis Sentimen">
@@ -562,21 +356,15 @@
                                 </div>
                                 <div class="sentiment-score-display">
                                     <span class="sentiment-score-label">Skor Sentimen</span>
-                                    <span class="sentiment-score-value mono" id="sentimentScoreValue">—</span>
+                                    <span class="sentiment-score-value mono" id="sentimentScoreValue">--</span>
                                 </div>
                             </div>
-                            
                             <div class="sentiment-gauge-container">
                                 <div class="sentiment-gauge-track">
                                     <div class="sentiment-gauge-fill" id="sentimentGaugeFill" style="width: 50%;"></div>
                                 </div>
-                                <div class="sentiment-gauge-labels">
-                                    <span>Negatif</span>
-                                    <span>Netral</span>
-                                    <span>Positif</span>
-                                </div>
+                                <div class="sentiment-gauge-labels"><span>Negatif</span><span>Netral</span><span>Positif</span></div>
                             </div>
-
                             <div class="sentiment-articles-container">
                                 <h4>Analisis Berita Terbaru</h4>
                                 <div class="sentiment-articles-list" id="sentimentArticlesList">
@@ -592,7 +380,6 @@
                     <!-- Screener Panel -->
                     <section class="tab-panel" data-panel="screener" id="panel-screener" role="tabpanel" aria-label="Stock Screener">
                         <div class="panel-body screener-panel">
-                            <!-- Screener Header -->
                             <div class="screener-header">
                                 <div class="screener-title-row">
                                     <h3 class="screener-title">Stock Screener</h3>
@@ -603,8 +390,6 @@
                                         <button class="btn-screener-primary" id="screenerScanBtn">Scan Saham</button>
                                     </div>
                                 </div>
-
-                                <!-- IDX Sectors Grid (Stockbit Category) -->
                                 <div class="screener-sectors-wrapper">
                                     <div class="screener-sectors-header">
                                         <span class="sectors-title">Sektor Saham IDX</span>
@@ -612,37 +397,25 @@
                                     </div>
                                     <div class="screener-sectors-grid" id="screenerSectorsGrid"></div>
                                 </div>
-
-                                <!-- Presets -->
                                 <div class="screener-presets" id="screenerPresets"></div>
-
-                                <!-- Filter Bar -->
                                 <div class="screener-filter-bar">
                                     <button class="screener-add-filter-btn" id="screenerAddFilterBtn">+ Tambah Filter</button>
                                     <div class="screener-active-filters" id="screenerActiveFilters">
-                                        <span class="screener-no-filters">Tidak ada filter aktif — tampilkan semua</span>
+                                        <span class="screener-no-filters">Tidak ada filter aktif</span>
                                     </div>
                                 </div>
-
-                                <!-- Progress Bar -->
                                 <div class="screener-progress" id="screenerProgress" style="display:none;">
-                                    <div class="screener-progress-track">
-                                        <div class="screener-progress-fill" id="screenerProgressFill"></div>
-                                    </div>
+                                    <div class="screener-progress-track"><div class="screener-progress-fill" id="screenerProgressFill"></div></div>
                                     <span class="screener-progress-text" id="screenerProgressText">0 / 0</span>
                                 </div>
                             </div>
-
-                            <!-- Table Container -->
                             <div class="screener-table-container" id="screenerTableContainer">
                                 <div class="screener-empty-state">
                                     <span class="empty-state-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
                                     <span class="empty-state-title">Belum ada data screening</span>
-                                    <span class="empty-state-text">Klik tombol "Scan Saham" untuk memulai screening</span>
+                                    <span class="empty-state-text">Klik "Scan Saham" untuk memulai screening</span>
                                 </div>
                             </div>
-
-                            <!-- Status Bar -->
                             <div class="screener-status-bar" id="screenerStatus"></div>
                         </div>
                     </section>
@@ -650,8 +423,6 @@
                     <!-- Recommendation Panel -->
                     <section class="tab-panel" data-panel="recommendation" id="panel-recommendation" role="tabpanel" aria-label="Rekomendasi Saham">
                         <div class="panel-body recommendation-panel">
-                            
-                            <!-- Strategy Category Nav (Stockbit Professional Style) -->
                             <div class="rec-strategy-nav">
                                 <button class="rec-strategy-btn active" data-strategy="scalping" id="btn-strat-scalping">
                                     <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
@@ -663,47 +434,40 @@
                                 </button>
                                 <button class="rec-strategy-btn" data-strategy="bsjp" id="btn-strat-bsjp" title="Beli Sore Jual Pagi">
                                     <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 18a5 5 0 0 0-10 0"></path><line x1="12" y1="2" x2="12" y2="9"></line><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line><line x1="1" y1="18" x2="3" y2="18"></line><line x1="21" y1="18" x2="23" y2="18"></line><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line></svg>
-                                    <span>BSJP (Sore - Pagi)</span>
+                                    <span>BSJP</span>
                                 </button>
                                 <button class="rec-strategy-btn" data-strategy="bpjs" id="btn-strat-bpjs" title="Beli Pagi Jual Sore">
                                     <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                                    <span>BPJS (Pagi - Sore)</span>
+                                    <span>BPJS</span>
                                 </button>
-                                <button class="rec-strategy-btn" data-strategy="bsij" id="btn-strat-bsij" title="Beli Siang Jual Sore (Sesi II Momentum)">
+                                <button class="rec-strategy-btn" data-strategy="bsij" id="btn-strat-bsij" title="Beli Siang Jual Sore">
                                     <svg class="rec-strat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                    <span>BSIJ (Siang - Sore)</span>
+                                    <span>BSIJ</span>
                                 </button>
                             </div>
-
-                            <!-- Strategy Banner Guidance & Header -->
                             <div class="rec-strategy-banner" id="recStrategyBanner">
                                 <div class="rec-banner-left">
                                     <h3 class="rec-banner-title" id="recBannerTitle">Scalping — Intraday Real-Time</h3>
-                                    <p class="rec-banner-desc" id="recBannerDesc">Analisis momentum cepat dan likuiditas tinggi untuk ambil cuan harian pada saham bervolatilitas aktif.</p>
+                                    <p class="rec-banner-desc" id="recBannerDesc">Analisis momentum cepat dan likuiditas tinggi untuk ambil cuan harian.</p>
                                 </div>
                                 <div class="rec-banner-right">
                                     <button class="rec-refresh-btn" id="recRefreshBtn" title="Muat Ulang Analisis">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                                        <span>Refresh Data</span>
+                                        <span>Refresh</span>
                                     </button>
                                 </div>
                             </div>
-
-                            <!-- Sub-Tab Switcher for Scalping (Hari Ini vs Besok Pagi) -->
                             <div class="rec-sub-nav" id="recScalpingSubNav">
-                                <button class="rec-sub-btn active" data-sub="today" id="btn-sub-today">Hari Ini (Live Session)</button>
+                                <button class="rec-sub-btn active" data-sub="today" id="btn-sub-today">Hari Ini (Live)</button>
                                 <button class="rec-sub-btn" data-sub="tomorrow" id="btn-sub-tomorrow">Besok Pagi (Pre-Open)</button>
                             </div>
-
-                            <!-- Dynamic Content Container -->
                             <div class="rec-main-content" id="recMainContent">
                                 <div class="rec-empty-state">
                                     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                                     <span class="rec-empty-title">Memuat data rekomendasi...</span>
-                                    <span class="rec-empty-text">Harap tunggu sebentar sementara sistem AI mengalkulasi sinyal saham</span>
+                                    <span class="rec-empty-text">Harap tunggu sementara sistem AI mengalkulasi sinyal saham</span>
                                 </div>
                             </div>
-
                         </div>
                     </section>
 
@@ -716,11 +480,127 @@
 
                 </div>
             </main>
+
+            <!-- RIGHT PANEL: Orderbook + Trading (Always Visible) -->
+            <aside class="right-panel" id="rightPanel">
+                <!-- Right Panel Tab Switcher -->
+                <div class="right-panel-tabs">
+                    <button class="right-panel-tab active" data-right-tab="orderbook" id="rightTab-orderbook">Orderbook</button>
+                    <button class="right-panel-tab" data-right-tab="portfolio" id="rightTab-portfolio">Trading</button>
+                </div>
+
+                <div class="right-panel-content">
+                    <!-- Orderbook Pane -->
+                    <div class="right-tab-pane active" data-right-pane="orderbook" id="rightPane-orderbook">
+                        <div class="orderbook-panel">
+                            <div class="orderbook-header">
+                                <h3 class="orderbook-title">Orderbook (Bid & Offer)</h3>
+                                <div class="orderbook-stats">
+                                    <span class="ob-stat-tag">Lot: 100</span>
+                                    <span class="ob-stat-tag">Live</span>
+                                </div>
+                            </div>
+                            <div class="ob-depth-bar">
+                                <div class="ob-depth-bid" id="obTotalBidBar" style="width: 55%;">Bid: <span id="obTotalBidText">0 Lot</span></div>
+                                <div class="ob-depth-offer" id="obTotalOfferBar" style="width: 45%;">Offer: <span id="obTotalOfferText">0 Lot</span></div>
+                            </div>
+                            <div class="orderbook-table-container">
+                                <table class="orderbook-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left">Bid Lot</th>
+                                            <th class="text-center">Bid Price</th>
+                                            <th class="text-center">Offer Price</th>
+                                            <th class="text-right">Offer Lot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="orderbookBody">
+                                        <tr><td colspan="4" class="text-center text-muted py-4">Memuat data orderbook...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="broker-summary-box">
+                                <h4>Ringkasan Bandarology</h4>
+                                <div class="broker-grid" id="brokerSummaryGrid">
+                                    <div class="broker-item"><span>Top Buyer:</span> <strong id="topBuyerCode">YP, ZP, CC</strong></div>
+                                    <div class="broker-item"><span>Top Seller:</span> <strong id="topSellerCode">PD, NI, MG</strong></div>
+                                    <div class="broker-item"><span>Net Foreign:</span> <strong class="text-green" id="netForeignFlow">+ Rp 24.5 M</strong></div>
+                                    <div class="broker-item"><span>Bandar Vol:</span> <strong class="text-green" id="bandarVolumeStatus">ACCUMULATION</strong></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Portfolio / Trading Pane -->
+                    <div class="right-tab-pane" data-right-pane="portfolio" id="rightPane-portfolio">
+                        <div class="portfolio-panel">
+                            <div class="portfolio-grid">
+                                <div class="portfolio-account-box">
+                                    <h3 class="portfolio-title">Akun Trading Virtual</h3>
+                                    <div class="acc-balance-total">
+                                        <span class="acc-label">Total Nilai Aset</span>
+                                        <h2 class="acc-value mono" id="portTotalAsset">Rp 100,000,000</h2>
+                                    </div>
+                                    <div class="acc-sub-metrics">
+                                        <div class="acc-metric"><span>Cash Tersedia</span><strong class="mono" id="portCashAvailable">Rp 100,000,000</strong></div>
+                                        <div class="acc-metric"><span>Modal Terinvestasi</span><strong class="mono" id="portInvested">Rp 0</strong></div>
+                                        <div class="acc-metric"><span>Floating P/L</span><strong class="mono text-green" id="portFloatingPL">Rp 0 (0.00%)</strong></div>
+                                    </div>
+                                    <button class="btn-screener-action mt-3" id="btnResetPortfolio">Reset Akun 100 Jt</button>
+                                </div>
+                                <div class="portfolio-order-box">
+                                    <h3 class="portfolio-title">Form Order</h3>
+                                    <div class="order-form">
+                                        <div class="order-field-group">
+                                            <label>Saham</label>
+                                            <input type="text" id="orderSymbolInput" readonly value="BBRI.JK" class="order-input font-bold">
+                                        </div>
+                                        <div class="order-field-group">
+                                            <label>Harga (<span id="orderPriceLabel">Limit</span>)</label>
+                                            <input type="number" id="orderPriceInput" value="4520" step="5" class="order-input">
+                                        </div>
+                                        <div class="order-field-group">
+                                            <label>Lot (1 Lot = 100 Lembar)</label>
+                                            <input type="number" id="orderLotInput" value="10" min="1" step="1" class="order-input">
+                                        </div>
+                                        <div class="order-total-display">
+                                            <span>Est. Nilai:</span>
+                                            <strong class="mono" id="orderEstValue">Rp 4,520,000</strong>
+                                        </div>
+                                        <div class="order-buttons">
+                                            <button class="btn-order-buy" id="btnExecuteBuy">BUY</button>
+                                            <button class="btn-order-sell" id="btnExecuteSell">SELL</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="holdings-section mt-4">
+                                <h4 class="holdings-title">Holdings</h4>
+                                <div class="screener-table-container">
+                                    <table class="screener-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Kode</th>
+                                                <th>Avg</th>
+                                                <th>Live</th>
+                                                <th>Lot</th>
+                                                <th>P/L</th>
+                                                <th>Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="holdingsTableBody">
+                                            <tr><td colspan="6" class="text-center text-muted py-4">Belum ada posisi aktif</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </div>
 
     <!-- Scripts -->
-
-    <!-- Existing scripts retained -->
     <script src="/js/indicators.js"></script>
     <script src="/js/signals.js"></script>
     <script src="/js/fundamental.js"></script>
@@ -738,7 +618,7 @@
         <div class="filter-modal-content">
             <div class="filter-modal-header">
                 <h3>Tambah Filter</h3>
-                <button class="btn-icon" id="filterModalCancel" title="Tutup">×</button>
+                <button class="btn-icon" id="filterModalCancel" title="Tutup">&times;</button>
             </div>
             <div class="filter-modal-body">
                 <div class="filter-modal-field">
@@ -774,7 +654,7 @@
     <div id="notifPanel" class="notif-panel" style="display:none;">
         <div class="notif-panel-header">
             <h3>Notifikasi Sinyal</h3>
-            <button id="notifCloseBtn" class="btn-icon" title="Tutup">×</button>
+            <button id="notifCloseBtn" class="btn-icon" title="Tutup">&times;</button>
         </div>
         <div id="notifList" class="notif-list">
             <div class="empty-state">

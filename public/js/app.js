@@ -1076,24 +1076,44 @@ class App {
             });
         }
 
-        // Mobile Watchlist Toggle
+        // Mobile Watchlist & Right Panel Toggle
         const mobileWatchlistBtn = document.getElementById('mobileWatchlistBtn');
+        const mobileTradeBtn = document.getElementById('mobileTradeBtn');
         const sidebarBackdrop = document.getElementById('sidebarBackdrop');
         const sidebar = document.getElementById('sidebar');
+        const rightPanel = document.getElementById('rightPanel');
 
         const toggleMobileSidebar = (show) => {
             if (!sidebar) return;
+            if (rightPanel) rightPanel.classList.remove('open');
             const shouldShow = show !== undefined ? show : (!sidebar.classList.contains('active') && !sidebar.classList.contains('open'));
             sidebar.classList.toggle('active', shouldShow);
             sidebar.classList.toggle('open', shouldShow);
             if (sidebarBackdrop) sidebarBackdrop.classList.toggle('active', shouldShow);
         };
 
+        const toggleMobileRightPanel = (show) => {
+            if (!rightPanel) return;
+            if (sidebar) {
+                sidebar.classList.remove('active');
+                sidebar.classList.remove('open');
+            }
+            const shouldShow = show !== undefined ? show : (!rightPanel.classList.contains('open'));
+            rightPanel.classList.toggle('open', shouldShow);
+            if (sidebarBackdrop) sidebarBackdrop.classList.toggle('active', shouldShow);
+        };
+
         if (mobileWatchlistBtn) {
             mobileWatchlistBtn.addEventListener('click', () => toggleMobileSidebar());
         }
+        if (mobileTradeBtn) {
+            mobileTradeBtn.addEventListener('click', () => toggleMobileRightPanel());
+        }
         if (sidebarBackdrop) {
-            sidebarBackdrop.addEventListener('click', () => toggleMobileSidebar(false));
+            sidebarBackdrop.addEventListener('click', () => {
+                toggleMobileSidebar(false);
+                toggleMobileRightPanel(false);
+            });
         }
 
         // Close mobile drawer when stock item in watchlist is clicked
@@ -1144,37 +1164,26 @@ class App {
     }
 
     _setupAutoTheme() {
-        const updateThemeByTime = () => {
-            const manualTheme = sessionStorage.getItem('stockpulse_manual_theme');
-            if (manualTheme) {
-                document.documentElement.setAttribute('data-theme', manualTheme);
-                return;
-            }
-
-            const now = new Date();
-            const hours = now.getHours(); // 0-23
-            // 06:00 to 17:59 => light, 18:00 to 05:59 => dark
-            const isDay = hours >= 6 && hours < 18;
-            const theme = isDay ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', theme);
+        const initTheme = () => {
+            const savedTheme = localStorage.getItem('stockpulse_theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
 
             const btn = document.getElementById('themeToggleBtn');
             if (btn) {
-                btn.title = `Mode Otomatis Jam: ${theme.toUpperCase()} (06:00-17:59 Light / 18:00-05:59 Dark)`;
+                btn.title = `Tema Aktif: ${savedTheme.toUpperCase()} (Klik untuk ubah)`;
             }
         };
 
-        updateThemeByTime();
-        setInterval(updateThemeByTime, 60000);
+        initTheme();
 
         const btn = document.getElementById('themeToggleBtn');
         if (btn) {
             btn.addEventListener('click', () => {
                 const current = document.documentElement.getAttribute('data-theme') || 'dark';
                 const next = current === 'light' ? 'dark' : 'light';
-                sessionStorage.setItem('stockpulse_manual_theme', next);
+                localStorage.setItem('stockpulse_theme', next);
                 document.documentElement.setAttribute('data-theme', next);
-                btn.title = `Mode Manual: ${next.toUpperCase()} (Klik untuk toggle)`;
+                btn.title = `Tema Aktif: ${next.toUpperCase()} (Klik untuk ubah)`;
             });
         }
     }
@@ -1875,9 +1884,24 @@ class App {
                 this._switchTab(target);
             });
         });
+
+        // Right Panel Tabs (Orderbook & Trading/Portfolio)
+        const rightTabs = document.querySelectorAll('.right-panel-tab');
+        rightTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = tab.dataset.rightTab;
+                this._switchRightTab(target);
+            });
+        });
     }
 
     _switchTab(tabName) {
+        // Fallback if anything requests orderbook or portfolio as main tab
+        if (tabName === 'orderbook' || tabName === 'portfolio') {
+            this._switchRightTab(tabName);
+            return;
+        }
+
         // Deactivate all tabs
         document.querySelectorAll('.panel-tab').forEach(t => {
             t.classList.remove('active');
@@ -1910,6 +1934,17 @@ class App {
         if (tabName === 'journal' && typeof window.JournalManager !== 'undefined') {
             window.JournalManager.loadAndRenderJournal();
         }
+    }
+
+    _switchRightTab(tabName) {
+        document.querySelectorAll('.right-panel-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.right-tab-pane').forEach(p => p.classList.remove('active'));
+
+        const tab = document.querySelector(`.right-panel-tab[data-right-tab="${tabName}"]`);
+        const pane = document.querySelector(`.right-tab-pane[data-right-pane="${tabName}"]`);
+        if (tab) tab.classList.add('active');
+        if (pane) pane.classList.add('active');
+
         if (tabName === 'orderbook' && typeof window.OrderbookManager !== 'undefined') {
             window.OrderbookManager.render();
         }
