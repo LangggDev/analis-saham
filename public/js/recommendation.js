@@ -192,12 +192,14 @@ const StockRecommendation = {
             if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
             const data = await res.json();
             this._data[key] = data;
+            this._isLoading[key] = false;
 
             if (this._getActiveDataKey() === key) {
                 this.renderCurrentView();
             }
         } catch (err) {
             console.error(`[Recommendation] Gagal memuat strategi ${key}:`, err);
+            this._isLoading[key] = false;
             if (this._getActiveDataKey() === key) {
                 this._renderErrorState(err.message, key);
             }
@@ -397,6 +399,22 @@ const StockRecommendation = {
         const pe = pick.profitEstimation || {};
         const hasEstimation = pe.profitPercent != null && pe.winProbability != null;
 
+        const durationMap = {
+            'today': '1 - 7 Jam (Hari Ini)',
+            'tomorrow': '1 - 4 Jam (Sesi I Besok)',
+            'swing': '2 - 7 Hari (Swing Trend)',
+            'bsjp': '12 - 16 Jam (Overnight)',
+            'bpjs': '3 - 6 Jam (Sesi I - II)',
+            'bsij': '1 - 3 Jam (Momentum Sesi II)'
+        };
+        const displayDuration = durationMap[strategyKey] || pe.timeEstimateLabel || '—';
+        let displayProfitPerDay = pe.profitPerDay || 0;
+        if (strategyKey === 'swing' && pe.profitPercent != null) {
+            displayProfitPerDay = parseFloat((pe.profitPercent / 4).toFixed(2));
+        } else if (strategyKey !== 'swing' && pe.profitPercent != null) {
+            displayProfitPerDay = pe.profitPercent;
+        }
+
         let detailsHTML = '';
         if (isBuyType) {
             const confClass = pe.confidenceLevel === 'HIGH' ? 'conf-high' : pe.confidenceLevel === 'MEDIUM' ? 'conf-medium' : 'conf-low';
@@ -429,7 +447,7 @@ const StockRecommendation = {
                     <div class="rec-est-grid">
                         <div class="rec-est-item">
                             <span class="rec-est-label">Durasi</span>
-                            <span class="rec-est-value">${pe.timeEstimateLabel || '—'}</span>
+                            <span class="rec-est-value">${displayDuration}</span>
                         </div>
                         <div class="rec-est-item">
                             <span class="rec-est-label">Potensi Profit</span>
@@ -446,7 +464,7 @@ const StockRecommendation = {
                     </div>
                     <div class="rec-est-progress">
                         <div class="rec-est-progress-label">
-                            <span>Laju Cuan/Hari: <strong>+${pe.profitPerDay || 0}%</strong></span>
+                            <span>Laju Cuan/Hari: <strong>+${displayProfitPerDay}%</strong></span>
                             <span>Volatilitas ATR: ${pe.atrPercent || 0}%</span>
                         </div>
                         <div class="rec-est-bar">

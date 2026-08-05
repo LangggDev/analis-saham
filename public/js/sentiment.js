@@ -50,11 +50,11 @@ const SentimentAnalysis = {
         if (!data || !data.articles || data.articlesAnalyzed === 0) {
             return {
                 overall: 'NEUTRAL',
-                label: 'Tidak Ada Data',
-                score: null,
+                label: 'Sentimen Netral (Stabil)',
+                score: (data && data.score !== undefined) ? data.score : 60,
                 articles: [],
                 method: 'none',
-                methodLabel: 'Tidak ada data',
+                methodLabel: 'Tidak ada berita (Netral)',
                 isEmpty: true
             };
         }

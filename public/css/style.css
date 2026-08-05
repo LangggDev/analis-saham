@@ -791,13 +791,51 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
   position: relative;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 .chart-viewport {
   display: none;
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
-.chart-viewport.active { display: block; }
+.chart-viewport.active { display: block !important; }
+
+/* Lightweight Custom Chart Floating Legend */
+.chart-legend {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 20;
+  background: rgba(13, 18, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-bright);
+  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+.chart-legend-symbol {
+  font-weight: 700;
+  color: var(--text-bright);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  padding-right: 8px;
+}
+.chart-legend-item { color: var(--text-muted); }
+.chart-legend-item b { color: var(--text-normal); font-weight: 600; }
+.chart-legend-item b.positive, .chart-legend-item.positive { color: var(--green); font-weight: 600; }
+.chart-legend-item b.negative, .chart-legend-item.negative { color: var(--red); font-weight: 600; }
+.chart-legend-item.vol { color: var(--secondary); font-weight: 600; }
 
 /* Indicator Info Bar */
 .indicator-info-bar {
@@ -1033,11 +1071,14 @@ a:hover { text-decoration: underline; }
 .orderbook-table tbody td {
   padding: 3px 6px;
   border-bottom: 1px solid var(--border-light);
+  transition: background-color 0.4s ease, font-weight 0.2s ease;
 }
 .bid-price { color: var(--green); font-weight: 600; }
-.bid-lot { color: var(--green); }
+.bid-lot { color: var(--green); transition: background-color 0.4s ease; }
 .offer-price { color: var(--red); font-weight: 600; }
-.offer-lot { color: var(--red); }
+.offer-lot { color: var(--red); transition: background-color 0.4s ease; }
+.flash-bid { background-color: rgba(0, 185, 114, 0.3) !important; border-radius: 2px; font-weight: 700 !important; }
+.flash-offer { background-color: rgba(255, 59, 92, 0.3) !important; border-radius: 2px; font-weight: 700 !important; }
 
 /* Broker Summary (Bandarology) */
 .broker-summary-box {

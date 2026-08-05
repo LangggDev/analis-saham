@@ -81,12 +81,12 @@ class ChartManager {
         // Explicitly enforce visibility of initial mode to prevent stacking
         if (this.tvWrap && this.customWrap) {
             if (this.mode === 'tv') {
-                this.tvWrap.style.display = 'flex';
+                this.tvWrap.style.display = 'block';
                 this.tvWrap.classList.add('active');
                 this.customWrap.style.display = 'none';
                 this.customWrap.classList.remove('active');
             } else {
-                this.customWrap.style.display = 'flex';
+                this.customWrap.style.display = 'block';
                 this.customWrap.classList.add('active');
                 this.tvWrap.style.display = 'none';
                 this.tvWrap.classList.remove('active');
@@ -108,7 +108,7 @@ class ChartManager {
                 tvBtn.classList.add('active');
                 customBtn.classList.remove('active');
                 if (this.tvWrap) {
-                    this.tvWrap.style.display = 'flex';
+                    this.tvWrap.style.display = 'block';
                     this.tvWrap.classList.add('active');
                 }
                 if (this.customWrap) {
@@ -124,7 +124,7 @@ class ChartManager {
                 customBtn.classList.add('active');
                 tvBtn.classList.remove('active');
                 if (this.customWrap) {
-                    this.customWrap.style.display = 'flex';
+                    this.customWrap.style.display = 'block';
                     this.customWrap.classList.add('active');
                 }
                 if (this.tvWrap) {
@@ -135,10 +135,11 @@ class ChartManager {
                 if (statusText) statusText.textContent = 'Pro Chart + Indikator Live';
                 if (this.chart && this.customWrap) {
                     setTimeout(() => {
-                        const width = this.customWrap.clientWidth || this.container?.clientWidth || 800;
-                        const height = this.customWrap.clientHeight || 520;
+                        const width = this.customWrap.clientWidth || this.container?.clientWidth || 780;
+                        const height = this.customWrap.clientHeight || this.container?.clientHeight || 480;
                         this.chart.applyOptions({ width, height });
-                    }, 50);
+                        this.chart.timeScale().fitContent();
+                    }, 40);
                 }
                 this.loadData(this.currentSymbol, this.currentInterval);
             });
