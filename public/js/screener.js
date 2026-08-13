@@ -17,7 +17,8 @@ const StockScreener = {
                 'MBMA.JK', 'SMGR.JK', 'INTP.JK', 'AVIA.JK', 'TINS.JK', 'PSAB.JK', 'DKFT.JK', 'NIKL.JK',
                 'CITA.JK', 'SMCB.JK', 'SMBR.JK', 'ARCI.JK', 'IFSH.JK', 'MCOL.JK', 'SOLA.JK', 'AGII.JK',
                 'ALDO.JK', 'AMFG.JK', 'BTON.JK', 'FASW.JK', 'GDST.JK', 'INCF.JK', 'ISSP.JK', 'KRAS.JK',
-                'LION.JK', 'LMSH.JK', 'PBSA.JK', 'TDPM.JK', 'TRST.JK', 'UNIC.JK'
+                'LION.JK', 'LMSH.JK', 'PBSA.JK', 'TDPM.JK', 'TRST.JK', 'UNIC.JK', 'BRMS.JK', 'SMGA.JK',
+                'NICE.JK', 'HILL.JK', 'ZINC.JK', 'DAAZ.JK', 'CHEM.JK', 'PBID.JK', 'EKAD.JK', 'FPNI.JK', 'IGAR.JK'
             ]
         },
         'ENERGY': {
@@ -28,7 +29,8 @@ const StockScreener = {
                 'CUAN.JK', 'PGEO.JK', 'HRUM.JK', 'ITMG.JK', 'DOID.JK', 'INDY.JK', 'PTRO.JK', 'BYAN.JK',
                 'GEMS.JK', 'BUMI.JK', 'ELSA.JK', 'MBSS.JK', 'ENRG.JK', 'TOBA.JK', 'ABMM.JK', 'APEX.JK',
                 'ARTI.JK', 'BIPI.JK', 'BSSR.JK', 'DEWA.JK', 'FIRE.JK', 'GTBO.JK', 'IATA.JK', 'KOBX.JK',
-                'MYOH.JK', 'RUIS.JK', 'SMMT.JK', 'SURE.JK', 'TEBE.JK', 'WINS.JK'
+                'MYOH.JK', 'RUIS.JK', 'SMMT.JK', 'SURE.JK', 'TEBE.JK', 'WINS.JK', 'DSSA.JK', 'ADMR.JK',
+                'AADI.JK', 'RAJA.JK', 'PSSI.JK', 'SGER.JK', 'HUMI.JK', 'GTRA.JK', 'KKGI.JK', 'BSML.JK', 'RGAS.JK'
             ]
         },
         'CYCLICAL': {
@@ -38,7 +40,8 @@ const StockScreener = {
                 'ACES.JK', 'MAPI.JK', 'MAPA.JK', 'ERAA.JK', 'RALS.JK', 'LPPF.JK', 'AUTO.JK', 'DRMA.JK',
                 'ASLC.JK', 'MPPA.JK', 'CINT.JK', 'WOOD.JK', 'PANR.JK', 'SCMA.JK', 'MNCN.JK', 'MSIN.JK',
                 'MDIA.JK', 'BELL.JK', 'BIKA.JK', 'BIPP.JK', 'BLTZ.JK', 'BOLA.JK', 'CSAP.JK', 'DFAM.JK',
-                'FAST.JK', 'FILM.JK', 'GLOB.JK', 'HERO.JK', 'KOCI.JK', 'MABA.JK'
+                'FAST.JK', 'FILM.JK', 'GLOB.JK', 'HERO.JK', 'KOCI.JK', 'MABA.JK', 'BMTR.JK', 'CARS.JK',
+                'IMAS.JK', 'IMJS.JK', 'MSKY.JK', 'ZONE.JK'
             ]
         },
         'FINANCE': {
@@ -49,7 +52,9 @@ const StockScreener = {
                 'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'BTPS.JK', 'NISP.JK', 'PNLF.JK', 'BFIN.JK', 'SRTG.JK',
                 'BBTN.JK', 'AGRO.JK', 'BCIC.JK', 'BNLI.JK', 'BSIM.JK', 'MAHA.JK', 'MFIN.JK', 'CFIN.JK',
                 'AMAG.JK', 'BABP.JK', 'BACA.JK', 'BBKP.JK', 'BBMD.JK', 'BCAP.JK', 'BEKS.JK', 'BGTG.JK',
-                'BINA.JK', 'BNBA.JK', 'BNII.JK', 'BSWD.JK', 'BTPN.JK', 'DNAR.JK', 'MASB.JK'
+                'BINA.JK', 'BNBA.JK', 'BNII.JK', 'BSWD.JK', 'BTPN.JK', 'DNAR.JK', 'MASB.JK', 'ADMF.JK',
+                'WOMF.JK', 'AMAR.JK', 'BBYB.JK', 'BANK.JK', 'TUGU.JK', 'PNBN.JK', 'PNIN.JK', 'MEGA.JK',
+                'NOBU.JK', 'MLPL.JK'
             ]
         },
         'INFRASTRUC': {
@@ -59,7 +64,8 @@ const StockScreener = {
                 'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK', 'FREN.JK', 'CENT.JK',
                 'GHON.JK', 'GOLD.JK', 'META.JK', 'CMNP.JK', 'KEEN.JK', 'POWR.JK', 'TGRA.JK', 'ACST.JK',
                 'BALI.JK', 'BPII.JK', 'BUKK.JK', 'DADA.JK', 'IBST.JK', 'IDPR.JK', 'KBLV.JK', 'LINK.JK',
-                'MCTA.JK', 'MTPS.JK', 'PPRE.JK', 'SSIA.JK', 'SUPR.JK', 'TLDN.JK'
+                'MCTA.JK', 'MTPS.JK', 'PPRE.JK', 'SSIA.JK', 'SUPR.JK', 'TLDN.JK', 'MORI.JK', 'OASA.JK',
+                'KARW.JK', 'MTEL.JK'
             ]
         },
         'HEALTH': {
@@ -68,7 +74,8 @@ const StockScreener = {
             symbols: [
                 'KLBF.JK', 'KAEF.JK', 'MIKA.JK', 'HEAL.JK', 'SILO.JK', 'SIDO.JK', 'INAF.JK', 'SAME.JK',
                 'PRDA.JK', 'TSPC.JK', 'PEHA.JK', 'DVLA.JK', 'PYFA.JK', 'BMHS.JK', 'CARE.JK', 'DGNS.JK',
-                'MEDS.JK', 'OMED.JK', 'PRAY.JK', 'PRIM.JK', 'RDTX.JK', 'SCPI.JK'
+                'MEDS.JK', 'OMED.JK', 'PRAY.JK', 'PRIM.JK', 'RDTX.JK', 'SCPI.JK', 'SOHO.JK', 'RSGK.JK',
+                'MTMH.JK', 'HALO.JK'
             ]
         },
         'INDUSTRIAL': {
@@ -77,7 +84,8 @@ const StockScreener = {
             symbols: [
                 'ASII.JK', 'UNTR.JK', 'HEXA.JK', 'PTPP.JK', 'WIKA.JK', 'ADHI.JK', 'WEGE.JK', 'TOTL.JK',
                 'MARK.JK', 'IMPC.JK', 'KBLI.JK', 'JECC.JK', 'ARNA.JK', 'BHIT.JK', 'CCSI.JK', 'GMFI.JK',
-                'INAI.JK', 'KBLM.JK', 'KMTR.JK', 'KPII.JK', 'SPTO.JK'
+                'INAI.JK', 'KBLM.JK', 'KMTR.JK', 'KPII.JK', 'SPTO.JK', 'BNBR.JK', 'VKTR.JK', 'MLIA.JK',
+                'LABA.JK', 'HYGN.JK', 'SKRN.JK', 'JTPE.JK'
             ]
         },
         'NON-CYCLICAL': {
@@ -87,7 +95,8 @@ const StockScreener = {
                 'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'CPIN.JK', 'JPFA.JK', 'CMRY.JK', 'CLEO.JK', 'MYOR.JK',
                 'AMRT.JK', 'GGRM.JK', 'HMSP.JK', 'STTP.JK', 'AALI.JK', 'LSIP.JK', 'TAPG.JK', 'DSNG.JK',
                 'SSMS.JK', 'BWPT.JK', 'SIMP.JK', 'VICI.JK', 'MAIN.JK', 'BEEF.JK', 'BTEK.JK', 'CEKA.JK',
-                'DLTA.JK', 'DMND.JK', 'FOOD.JK', 'GOOD.JK', 'HOKI.JK', 'IKAN.JK', 'KEJU.JK'
+                'DLTA.JK', 'DMND.JK', 'FOOD.JK', 'GOOD.JK', 'HOKI.JK', 'IKAN.JK', 'KEJU.JK', 'BOBA.JK',
+                'STRK.JK', 'ROTI.JK', 'ULTJ.JK', 'ADES.JK', 'CAMP.JK', 'TBLA.JK'
             ]
         },
         'PROPERTY': {
@@ -97,7 +106,8 @@ const StockScreener = {
                 'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'ASRI.JK', 'APLN.JK', 'DUTI.JK', 'MKPI.JK',
                 'DILD.JK', 'KIJA.JK', 'BEST.JK', 'LPKR.JK', 'LPCK.JK', 'PPRO.JK', 'JRPT.JK', 'BKSL.JK',
                 'ARMY.JK', 'BAPA.JK', 'BBSS.JK', 'BCIP.JK', 'CITY.JK', 'COWL.JK', 'CPRI.JK', 'DMAS.JK',
-                'ELTY.JK', 'FMII.JK', 'FORZ.JK', 'GAMA.JK', 'GPRA.JK', 'GWSA.JK', 'IPAC.JK'
+                'ELTY.JK', 'FMII.JK', 'FORZ.JK', 'GAMA.JK', 'GPRA.JK', 'GWSA.JK', 'IPAC.JK', 'PANI.JK',
+                'REAL.JK', 'SWID.JK', 'TRIN.JK', 'URBN.JK', 'VAST.JK'
             ]
         },
         'TRANSPORT': {
@@ -106,7 +116,8 @@ const StockScreener = {
             symbols: [
                 'BIRD.JK', 'SMDR.JK', 'ASSA.JK', 'TMAS.JK', 'HELI.JK', 'HAIS.JK', 'GIAA.JK', 'CMPP.JK',
                 'IPCC.JK', 'IPCM.JK', 'SAFE.JK', 'BPTR.JK', 'TRUK.JK', 'WEHA.JK', 'AKSI.JK', 'BLTA.JK',
-                'CASS.JK', 'DEAL.JK', 'HITS.JK', 'JKSW.JK', 'LEAD.JK', 'LRNA.JK'
+                'CASS.JK', 'DEAL.JK', 'HITS.JK', 'JKSW.JK', 'LEAD.JK', 'LRNA.JK', 'NELY.JK', 'SOCI.JK',
+                'KLAS.JK', 'PTMP.JK', 'PJAA.JK'
             ]
         },
         'TECHNOLOGY': {
@@ -115,7 +126,8 @@ const StockScreener = {
             symbols: [
                 'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'MLPT.JK', 'DCII.JK', 'MTDL.JK', 'WIFI.JK', 'BELI.JK',
                 'AXIO.JK', 'MCAS.JK', 'NFCX.JK', 'DMMX.JK', 'ENVY.JK', 'ATIC.JK', 'CASH.JK', 'DIVA.JK',
-                'GLVA.JK', 'HDIT.JK', 'JSPT.JK', 'LUCK.JK', 'MTECH.JK', 'PTSN.JK', 'WIRE.JK'
+                'GLVA.JK', 'HDIT.JK', 'JSPT.JK', 'LUCK.JK', 'MTECH.JK', 'PTSN.JK', 'WIRE.JK', 'AWAN.JK',
+                'ZYRX.JK', 'CYBR.JK', 'CHIP.JK', 'EDGE.JK', 'ELIT.JK', 'TECH.JK', 'TRON.JK', 'AREA.JK'
             ]
         }
     },

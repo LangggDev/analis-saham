@@ -276,7 +276,7 @@ const SignalEngine = {
         // --- Liquidity & Anti-Penny Stock Trap Protection ---
         const avgVolVal = volMA && volMA.length > 0 ? volMA[volMA.length - 1].value : lastVolume;
         const dailyTurnover = avgVolVal * lastPrice;
-        const isIlliquidTrap = lastPrice <= 60 || (dailyTurnover < 250000000 && lastPrice < 5000) || avgVolVal < 15000;
+        const isIlliquidTrap = dailyTurnover < 50000000 || (lastPrice < 10000 && avgVolVal < 5000);
         if (isIlliquidTrap) {
             signals.push({
                 name: 'Liquidity Filter',

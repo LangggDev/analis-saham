@@ -245,6 +245,10 @@ async function withRetry(fn, maxRetries = 3) {
       return await fn();
     } catch (err) {
       lastError = err;
+      // Abort langsung jika error 404 / 400 (saham tidak ada di Yahoo Finance / tidak terindeks), retry tidak akan menyelesaikan error ini
+      if (err.message && (err.message.includes('404') || err.message.includes('Not Found') || err.message.includes('400') || err.message.includes('No chart data'))) {
+        throw err;
+      }
       if (attempt < maxRetries - 1) {
         const delay = Math.pow(2, attempt) * 500;
         console.warn(`  ⚠ Attempt ${attempt + 1} failed (${err.message}), retrying in ${delay}ms...`);
@@ -1107,6 +1111,7 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     const sma20 = calcSMA(closes, 20);
     const sma50 = calcSMA(closes, 50);
     const sma200 = calcSMA(closes, 200);
+    const ema10 = calcEMA(closes, 10); // Enhancement #11: Short-term trend for multi-timeframe alignment
     const ema12 = calcEMA(closes, 12);
     const ema26 = calcEMA(closes, 26);
     const ema50 = calcEMA(closes, 50);
@@ -1136,10 +1141,14 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
 
     // 2. MACD (12, 26, 9) Calculation
     const macdLine = ema12 && ema26 ? ema12 - ema26 : 0;
-    // Calculate MACD history for signal line
+    // FIX #1: Calculate MACD history with properly seeded EMA12 through bars 12-25
     const macdHistory = [];
     let tempEma12 = closes.slice(0, 12).reduce((a, b) => a + b, 0) / 12;
-    let tempEma26 = closes.slice(0, 26).reduce((a, b) => a + b, 0) / 26;
+    let tempEma26 = closes.length >= 26 ? closes.slice(0, 26).reduce((a, b) => a + b, 0) / 26 : 0;
+    // Properly update EMA12 for bars 12-25 before MACD history starts
+    for (let i = 12; i < Math.min(26, closes.length); i++) {
+      tempEma12 = closes[i] * (2 / 13) + tempEma12 * (1 - 2 / 13);
+    }
     for (let i = 26; i < closes.length; i++) {
       tempEma12 = closes[i] * (2 / 13) + tempEma12 * (1 - 2 / 13);
       tempEma26 = closes[i] * (2 / 27) + tempEma26 * (1 - 2 / 27);
@@ -1148,7 +1157,7 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     const macdSignalLine = macdHistory.length >= 9 ? calcEMA(macdHistory, 9) : 0;
     const macdHist = macdLine - macdSignalLine;
 
-    // 3. Stochastic Oscillator (%K 14, %D 3) — with smoothing to reduce false signals
+    // 3. Stochastic Oscillator (%K 14, %D 3) — with smoothing + crossover detection
     const stochKValues = [];
     for (let si = 13; si < ohlcv.length; si++) {
       const sHighs = highs.slice(si - 13, si + 1);
@@ -1160,8 +1169,17 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     const stochK = stochKValues.length > 0 ? stochKValues[stochKValues.length - 1] : 50;
     // %D = SMA(3) of %K for smoothing
     let stochD = stochK;
+    let prevStochK = stochK, prevStochD = stochD;
     if (stochKValues.length >= 3) {
       stochD = (stochKValues[stochKValues.length - 1] + stochKValues[stochKValues.length - 2] + stochKValues[stochKValues.length - 3]) / 3;
+    }
+    // Fix #15: Stochastic %K/%D Crossover Detection
+    let stochCrossover = 'NONE'; // BULLISH_CROSS, BEARISH_CROSS, NONE
+    if (stochKValues.length >= 4) {
+      prevStochK = stochKValues[stochKValues.length - 2];
+      prevStochD = (stochKValues[stochKValues.length - 2] + stochKValues[stochKValues.length - 3] + stochKValues[stochKValues.length - 4]) / 3;
+      if (prevStochK <= prevStochD && stochK > stochD) stochCrossover = 'BULLISH_CROSS';
+      else if (prevStochK >= prevStochD && stochK < stochD) stochCrossover = 'BEARISH_CROSS';
     }
 
     // 4. Volume Analysis
@@ -1437,10 +1455,10 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
         }
       }
 
-      // FIX: Tighter thresholds (was 0.995/1.005 = 0.5%, now 0.98/1.02 = 2%)
+      // FIX #10: Tighter divergence thresholds — price must be at/above past extremes
       // Also require RSI slope confirmation
-      const rsiDivBearish = lastPrice >= maxPastClose * 0.98 && rsi < 55 && rsiSlope < -3;
-      const rsiDivBullish = lastPrice <= minPastClose * 1.02 && rsi > 38 && rsiSlope > 3;
+      const rsiDivBearish = lastPrice >= maxPastClose * 1.0 && rsi < 55 && rsiSlope < -3;
+      const rsiDivBullish = lastPrice <= minPastClose * 1.0 && rsi > 38 && rsiSlope > 3;
       const obvDivBearish = obvDivergence === 'DISTRIBUTION';
       const obvDivBullish = obvDivergence === 'ACCUMULATION';
       const macdDivBearish = macdMomentum === 'DECELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BEAR';
@@ -1459,13 +1477,59 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       }
     }
 
-    // 8. Liquidity & Anti-Penny Stock Trap Protection
+    // 8. Cerdas & Adaptif: Proteksi Likuiditas (Mendukung Saham Sultan & Saham Gorengan/Aktif)
     const dailyTurnover = avgVol * lastPrice;
-    const isIlliquidTrap = symbol.endsWith('.JK') && (lastPrice <= 60 || (dailyTurnover < 250000000 && lastPrice < 5000) || avgVol < 15000);
+    // FIX #8: Lower threshold from 50M to 20M to avoid over-filtering active small-caps
+    const isIlliquidTrap = symbol.endsWith('.JK') && (dailyTurnover < 20000000 || (lastPrice < 5000 && avgVol < 3000));
 
     // ═══════════════════════════════════════════════════════════════
-    // 8b. Bollinger Bands %B (NEW — Squeeze & Overbought/Oversold Detection)
-    //     Missing from server-side scoring = accuracy gap
+    // 8a-i. Enhancement #12: Volume Trend Detection (3-day rising volume)
+    //       3 consecutive days of rising volume = genuine accumulation
+    // ═══════════════════════════════════════════════════════════════
+    let volumeTrend = 'FLAT'; // RISING_3D, FALLING_3D, FLAT
+    if (ohlcv.length >= 4) {
+      const v1 = ohlcv[ohlcv.length - 3].volume;
+      const v2 = ohlcv[ohlcv.length - 2].volume;
+      const v3 = ohlcv[ohlcv.length - 1].volume;
+      if (v3 > v2 && v2 > v1 && v3 > avgVol * 0.8) volumeTrend = 'RISING_3D';
+      else if (v3 < v2 && v2 < v1) volumeTrend = 'FALLING_3D';
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 8a-ii. Enhancement #6: Anti-Trap Safeguards
+    //        Bull Trap, Pump-and-Dump, Dead Cat Bounce detection
+    // ═══════════════════════════════════════════════════════════════
+    let trapType = 'NONE'; // BULL_TRAP, PUMP_DUMP, DEAD_CAT_BOUNCE, NONE
+    let trapPenalty = 0;
+    if (ohlcv.length >= 5) {
+      // Bull Trap: price rising but volume falling 3 consecutive days
+      const priceUp3 = closes[closes.length - 1] > closes[closes.length - 4];
+      if (priceUp3 && volumeTrend === 'FALLING_3D') {
+        trapType = 'BULL_TRAP';
+        trapPenalty = -12;
+      }
+      // Pump-and-Dump: volume spike > 4x average AND price already up > 8% in 3 days
+      const priceChange3d = closes.length >= 4 ? ((closes[closes.length - 1] - closes[closes.length - 4]) / closes[closes.length - 4]) * 100 : 0;
+      if (volRatio > 4 && priceChange3d > 8) {
+        trapType = 'PUMP_DUMP';
+        trapPenalty = -20;
+      }
+    }
+    // Dead Cat Bounce: dropped > 15% in 10 days then bounced 2-5% (false recovery)
+    if (ohlcv.length >= 12) {
+      const priceNow = closes[closes.length - 1];
+      const price10ago = closes[closes.length - 11];
+      const price3ago = closes[closes.length - 4];
+      const drop10d = ((price3ago - price10ago) / price10ago) * 100;
+      const bounce3d = ((priceNow - price3ago) / price3ago) * 100;
+      if (drop10d < -12 && bounce3d > 1.5 && bounce3d < 6) {
+        trapType = 'DEAD_CAT_BOUNCE';
+        trapPenalty = -15;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 8b. Bollinger Bands %B (Squeeze & Overbought/Oversold Detection)
     // ═══════════════════════════════════════════════════════════════
     let bbPercentB = 0.5; // default: midband
     let bbBandwidth = 0;
@@ -1532,17 +1596,52 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     const trendModulator = isTrending ? 1.0 : isRanging ? 0.5 : 0.75;
 
     // ═══════════════════════════════════════════════════════════════
-    // Multi-Factor Precision Scoring v3.0 (0-100)
-    // Enhanced with: BB %B, ADX trend modulation, Stochastic %D smoothing
-    // FIX: Better score distribution via proportional scoring
+    // Multi-Factor Precision Scoring v4.0 (0-100)
+    // FIX #2: RSI reversal confirmation (no more catching falling knives)
+    // FIX #3: VWAP nuanced scoring (buy opportunity vs overbought)
+    // FIX #9: TradingView scoring symmetry
+    // FIX #15: Stochastic crossover signal
+    // Enhancement #11: EMA alignment chain (EMA10 > EMA20 > EMA50)
+    // Enhancement #12: Volume trend detection (3-day rising volume)
+    // Enhancement #6: Anti-trap penalty integration
     // ═══════════════════════════════════════════════════════════════
     let score = 50;
 
-    // RSI Factor (+/- 15) — capped lower to improve distribution
-    if (rsi <= 30) score += 15;
-    else if (rsi <= 40) score += 8;
-    else if (rsi >= 70) score -= 15;
-    else if (rsi >= 60) score -= 8;
+    // RSI Factor (+/- 15) — FIX #2: Oversold only bullish if RSI is turning up
+    // Compute RSI slope from last-bar to detect reversal vs continued decline
+    let rsiTurningUp = false;
+    let rsiTurningDown = false;
+    if (closes.length >= 16) {
+      // Approximate previous-bar RSI using Wilder's method snapshot
+      let pGains = 0, pLosses = 0;
+      for (let ri = 1; ri <= 14; ri++) {
+        const d = closes[ri] - closes[ri - 1];
+        if (d >= 0) pGains += d; else pLosses += Math.abs(d);
+      }
+      let pAvgGain = pGains / 14, pAvgLoss = pLosses / 14;
+      for (let ri = 15; ri < closes.length - 1; ri++) {
+        const d = closes[ri] - closes[ri - 1];
+        if (d >= 0) { pAvgGain = (pAvgGain * 13 + d) / 14; pAvgLoss = (pAvgLoss * 13) / 14; }
+        else { pAvgGain = (pAvgGain * 13) / 14; pAvgLoss = (pAvgLoss * 13 + Math.abs(d)) / 14; }
+      }
+      const prevRsi = pAvgLoss === 0 ? 100 : 100 - (100 / (1 + (pAvgGain / pAvgLoss)));
+      rsiTurningUp = rsi > prevRsi + 1;  // RSI rising by > 1 point
+      rsiTurningDown = rsi < prevRsi - 1; // RSI falling by > 1 point
+    }
+
+    if (rsi <= 30) {
+      // Oversold: only strong bullish if RSI is turning up (reversal confirmed)
+      if (rsiTurningUp) score += 15;
+      else if (!rsiTurningDown) score += 5; // flat RSI in oversold = mild bullish
+      // else: RSI still falling in oversold = catching falling knife, no bonus
+    } else if (rsi <= 40) {
+      score += rsiTurningUp ? 8 : 4;
+    } else if (rsi >= 70) {
+      if (rsiTurningDown) score -= 15;
+      else score -= 10;
+    } else if (rsi >= 60) {
+      score -= rsiTurningDown ? 8 : 4;
+    }
 
     // Moving Average Trend Factor (+/- 15, modulated by ADX)
     if (sma20 && lastPrice > sma20) score += Math.round(5 * trendModulator);
@@ -1551,6 +1650,12 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     else if (sma50) score -= Math.round(5 * trendModulator);
     if (sma200 && lastPrice > sma200) score += Math.round(5 * trendModulator);
     else if (sma200) score -= Math.round(5 * trendModulator);
+
+    // Enhancement #11: EMA Alignment Chain (Price > EMA10 > EMA20 > EMA50 = strong uptrend)
+    if (ema10 && sma20 && ema50) {
+      if (lastPrice > ema10 && ema10 > sma20 && sma20 > ema50) score += 6; // perfect bullish alignment
+      else if (lastPrice < ema10 && ema10 < sma20 && sma20 < ema50) score -= 6; // perfect bearish alignment
+    }
 
     // Golden / Death Cross Factor (+/- 8, modulated by ADX)
     if (sma50 && sma200) {
@@ -1574,11 +1679,18 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       else if (volRatio > 1.2 && priceTrendSlope > 0.3) score += 6;
     }
 
-    // Stochastic Factor (+/- 8, using smoothed %D instead of raw %K)
+    // Enhancement #12: Volume Trend Bonus (+/- 6)
+    if (volumeTrend === 'RISING_3D' && priceTrendSlope > 0) score += 6;
+    else if (volumeTrend === 'FALLING_3D' && priceTrendSlope > 0) score -= 4; // divergence: price up, vol down
+
+    // Stochastic Factor (+/- 8, using smoothed %D)
     if (stochD < 20) score += 8;
     else if (stochD > 80) score -= 8;
+    // Fix #15: Stochastic Crossover Signal (+/- 5)
+    if (stochCrossover === 'BULLISH_CROSS' && stochK < 50) score += 5; // bullish cross from oversold zone
+    else if (stochCrossover === 'BEARISH_CROSS' && stochK > 50) score -= 5; // bearish cross from overbought zone
 
-    // Bollinger Bands %B Factor (+/- 8) — NEW
+    // Bollinger Bands %B Factor (+/- 8)
     if (bbPercentB < 0.05) score += 8;    // below lower band = oversold
     else if (bbPercentB < 0.20) score += 4;
     else if (bbPercentB > 0.95) score -= 8; // above upper band = overbought
@@ -1586,18 +1698,22 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     // BB Squeeze bonus: tight bands = potential breakout, boost score for trending stocks
     if (bbSqueeze && isTrending) score += 5;
 
-    // Divergence Synergy (+/- 15 based on confirmation strength, reduced from 20)
+    // Divergence Synergy (+/- 15 based on confirmation strength)
     if (divergence === 'BULLISH_ACCUMULATION') {
       score += divergenceStrength >= 2 ? 15 : 8;
     } else if (divergence === 'BEARISH_BULL_TRAP') {
       score -= divergenceStrength >= 2 ? 15 : 8;
     }
 
-    // VWAP Institutional Factor (+/- 6)
-    if (vwapDeviation > 2) score += 6;
-    else if (vwapDeviation > 0.5) score += 3;
-    else if (vwapDeviation < -2) score -= 6;
-    else if (vwapDeviation < -0.5) score -= 3;
+    // FIX #3: VWAP Institutional Factor — Nuanced Scoring (+/- 6)
+    // Slightly above VWAP = confirmed support (bullish)
+    // Far above VWAP = extended/overbought risk (less bullish)
+    // Below VWAP = potential buy zone IF other signals confirm, else bearish
+    if (vwapDeviation > 0.3 && vwapDeviation <= 2.0) score += 5;   // healthy position above VWAP
+    else if (vwapDeviation > 2.0) score += 2;                       // extended above VWAP, reduced bonus
+    else if (vwapDeviation < -0.3 && vwapDeviation >= -2.0 && rsiTurningUp) score += 3; // below VWAP but reversing = buy zone
+    else if (vwapDeviation < -2.0) score -= 6;                      // significantly below VWAP = bearish
+    else if (vwapDeviation < -0.3) score -= 3;                      // slightly below VWAP
 
     // OBV Smart Money Factor (+/- 10)
     if (obvDivergence === 'ACCUMULATION') score += 10;
@@ -1621,22 +1737,24 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       else if (positionIn52w > 0.90 && rsi >= 60) score -= 6;
     }
 
-    // ADX Trend Strength Factor (+/- 4) — NEW
-    if (isTrending && priceTrendSlope > 1) score += 4;  // strong trend + upward = bullish
+    // ADX Trend Strength Factor (+/- 4)
+    if (isTrending && priceTrendSlope > 1) score += 4;
     else if (isTrending && priceTrendSlope < -1) score -= 4;
-    else if (isRanging) score -= 2; // ranging market = less confident in any direction
+    else if (isRanging) score -= 2;
 
     // Synergy & Conflict Intelligence
     const bullishFactors = [
       rsi <= 40,
       macdLine > macdSignalLine,
       lastPrice > (sma50 || 0),
-      vwapDeviation > 0.5,
+      vwapDeviation > 0.3,
       obvTrend === 'RISING',
       stochD < 30,
       candlestickScore > 0,
       macdMomentumScore > 0,
       bbPercentB < 0.20,
+      volumeTrend === 'RISING_3D',    // Enhancement #12
+      stochCrossover === 'BULLISH_CROSS', // Fix #15
     ].filter(Boolean).length;
 
     const bearishFactors = [
@@ -1649,25 +1767,34 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       candlestickScore < 0,
       macdMomentumScore < 0,
       bbPercentB > 0.80,
+      volumeTrend === 'FALLING_3D',    // Enhancement #12
+      stochCrossover === 'BEARISH_CROSS', // Fix #15
     ].filter(Boolean).length;
 
-    // Synergy bonus: 5+ factors aligned = strong conviction
-    if (bullishFactors >= 6) score += 8;
-    else if (bullishFactors >= 5) score += 5;
-    else if (bearishFactors >= 6) score -= 8;
-    else if (bearishFactors >= 5) score -= 5;
+    // Synergy bonus: 6+ factors aligned = strong conviction
+    if (bullishFactors >= 7) score += 10;
+    else if (bullishFactors >= 6) score += 7;
+    else if (bullishFactors >= 5) score += 4;
+    else if (bearishFactors >= 7) score -= 10;
+    else if (bearishFactors >= 6) score -= 7;
+    else if (bearishFactors >= 5) score -= 4;
     // Conflict penalty: strong signals in both directions = unreliable
     if (bullishFactors >= 3 && bearishFactors >= 3) score -= 5;
 
-    // TradingView Official Screener Rating Validator
+    // FIX #9: TradingView Official Screener Rating Validator (Symmetric scoring)
     if (tvData.rating === 'STRONG_BUY') score += 8;
     else if (tvData.rating === 'BUY') score += 4;
-    else if (tvData.rating === 'SELL') score -= 8;
-    else if (tvData.rating === 'STRONG_SELL') score -= 15;
+    else if (tvData.rating === 'SELL') score -= 6;
+    else if (tvData.rating === 'STRONG_SELL') score -= 10;
+
+    // Enhancement #6: Anti-Trap Penalty Integration
+    if (trapType !== 'NONE') {
+      score += trapPenalty;
+    }
 
     // Liquidity Trap Safety Override
     if (isIlliquidTrap) {
-      score = Math.min(score - 15, 45);
+      score = Math.min(score - 12, 45);
     }
 
     score = Math.max(0, Math.min(100, Math.round(score)));
@@ -1701,8 +1828,8 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     // Time estimates (in trading days)
     const rawDaysToTarget = dailyMovementEstimate > 0 ? distanceToTP / dailyMovementEstimate : 999;
 
-    // Confidence adjustment based on score & trend alignment
-    const confidenceMultiplier = Math.max(0.3, Math.min(2.0, (score > 0 ? score : 50) / 60));
+    // FIX #16: Confidence adjustment — floor at 0.5 to prevent absurd time estimates
+    const confidenceMultiplier = Math.max(0.5, Math.min(2.0, score / 60));
     const adjustedDaysToTarget = Math.max(1, Math.round(rawDaysToTarget / confidenceMultiplier));
 
     // Convert to different time units
@@ -1718,72 +1845,65 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
     const profitPerDay = estimatedDays > 0 ? parseFloat((profitPercent / estimatedDays).toFixed(2)) : 0;
     const lossPercent = lastPrice > 0 ? parseFloat(((distanceToSL / lastPrice) * 100).toFixed(2)) : 0;
 
-    // Win Probability Calculation v3.0 (enhanced with BB, ADX, %D, 5-bar slope)
+    // ═══════════════════════════════════════════════════════════════
+    // FIX #4: Win Probability v4.0 — Independent Signal Confluence Model
+    // Instead of re-adding the same factors used in scoring (double-counting),
+    // this uses a CATEGORY-based confluence system where each category
+    // contributes exactly once. 7 categories, each worth ~7 probability points.
+    // ═══════════════════════════════════════════════════════════════
     let winProb = 50;
-    // RSI alignment
-    if (rsi <= 30) winProb += 10;
-    else if (rsi <= 40) winProb += 5;
-    else if (rsi >= 70) winProb -= 10;
-    else if (rsi >= 60) winProb -= 5;
-    // MACD alignment (modulated by ADX)
-    if (macdLine > macdSignalLine && macdHist > 0) winProb += Math.round(8 * trendModulator);
-    else if (macdLine > macdSignalLine) winProb += Math.round(4 * trendModulator);
-    else if (macdLine < macdSignalLine && macdHist < 0) winProb -= Math.round(8 * trendModulator);
-    else if (macdLine < macdSignalLine) winProb -= Math.round(4 * trendModulator);
-    // Moving average trend (modulated by ADX)
-    if (sma20 && sma50 && lastPrice > sma20 && lastPrice > sma50) winProb += Math.round(6 * trendModulator);
-    else if (sma20 && sma50 && lastPrice < sma20 && lastPrice < sma50) winProb -= Math.round(6 * trendModulator);
-    // Golden/Death Cross
-    if (sma50 && sma200 && sma50 > sma200) winProb += Math.round(4 * trendModulator);
-    else if (sma50 && sma200 && sma50 < sma200) winProb -= Math.round(4 * trendModulator);
-    // Volume confirmation (using 5-bar slope instead of 1-bar)
-    if (volRatio > 1.5 && priceTrendSlope > 0.5) winProb += 6;
-    else if (volRatio > 1.5 && priceTrendSlope < -0.5) winProb -= 6;
-    // Stochastic (using smoothed %D)
-    if (stochD < 20) winProb += 5;
-    else if (stochD > 80) winProb -= 5;
-    // Bollinger Bands %B
-    if (bbPercentB < 0.10) winProb += 5;
-    else if (bbPercentB > 0.90) winProb -= 5;
-    // BB Squeeze + trending = breakout potential
-    if (bbSqueeze && isTrending) winProb += 4;
-    // Divergence synergy
-    if (divergence === 'BULLISH_ACCUMULATION') winProb += divergenceStrength >= 2 ? 10 : 5;
-    else if (divergence === 'BEARISH_BULL_TRAP') winProb -= divergenceStrength >= 2 ? 10 : 5;
-    // RRR bonus
-    if (riskRewardRatio >= 3) winProb += 5;
-    else if (riskRewardRatio >= 2) winProb += 3;
-    else if (riskRewardRatio < 1) winProb -= 5;
-    // VWAP institutional positioning
-    if (vwapDeviation > 1) winProb += 4;
-    else if (vwapDeviation < -1) winProb -= 4;
-    // OBV smart money flow
-    if (obvDivergence === 'ACCUMULATION') winProb += 7;
-    else if (obvDivergence === 'DISTRIBUTION') winProb -= 7;
-    else if (obvTrend === 'RISING') winProb += 3;
-    else if (obvTrend === 'FALLING') winProb -= 3;
-    // Candlestick pattern
-    if (candlestickScore > 0) winProb += 3;
-    else if (candlestickScore < 0) winProb -= 3;
-    // MACD momentum
-    if (macdMomentumScore > 3) winProb += 3;
-    else if (macdMomentumScore < -3) winProb -= 3;
-    // ADX trend strength
-    if (isTrending && priceTrendSlope > 1) winProb += 3;
-    else if (isRanging) winProb -= 2;
-    // Synergy/Conflict
-    if (bullishFactors >= 6) winProb += 5;
-    else if (bullishFactors >= 5) winProb += 3;
-    else if (bearishFactors >= 6) winProb -= 5;
-    else if (bearishFactors >= 5) winProb -= 3;
-    if (bullishFactors >= 3 && bearishFactors >= 3) winProb -= 3;
-    // TradingView validation
-    if (tvData.rating === 'STRONG_BUY') winProb += 4;
-    else if (tvData.rating === 'BUY') winProb += 2;
-    else if (tvData.rating === 'SELL') winProb -= 4;
-    else if (tvData.rating === 'STRONG_SELL') winProb -= 8;
-    // Illiquidity penalty
-    if (isIlliquidTrap) winProb -= 8;
+
+    // Category 1: Momentum State (RSI + Stochastic combined) — single contribution
+    const momentumBullish = (rsi <= 40 && rsiTurningUp) || (stochD < 25 && stochCrossover === 'BULLISH_CROSS');
+    const momentumBearish = (rsi >= 65 && rsiTurningDown) || (stochD > 75 && stochCrossover === 'BEARISH_CROSS');
+    const momentumNeutralBull = rsi >= 40 && rsi <= 55 && stochK > stochD; // healthy mid-range momentum
+    if (momentumBullish) winProb += 8;
+    else if (momentumBearish) winProb -= 8;
+    else if (momentumNeutralBull) winProb += 3;
+
+    // Category 2: Trend Structure (MA alignment + ADX) — single contribution
+    const trendBullish = (sma50 && sma200 && sma50 > sma200) && (ema10 && sma20 && lastPrice > ema10 && ema10 > sma20) && isTrending;
+    const trendBearish = (sma50 && sma200 && sma50 < sma200) && (ema10 && sma20 && lastPrice < ema10 && ema10 < sma20);
+    const trendPartialBull = (sma50 && lastPrice > sma50) || (sma20 && lastPrice > sma20);
+    if (trendBullish) winProb += 10;
+    else if (trendBearish) winProb -= 10;
+    else if (trendPartialBull) winProb += 4;
+
+    // Category 3: MACD Signal State — single contribution
+    const macdBullish = macdLine > macdSignalLine && macdHist > 0 && (macdMomentum === 'ACCELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BULL');
+    const macdBearish = macdLine < macdSignalLine && macdHist < 0 && (macdMomentum === 'ACCELERATING_BEAR' || macdMomentum === 'ZERO_CROSS_BEAR');
+    if (macdBullish) winProb += 8;
+    else if (macdLine > macdSignalLine) winProb += 4;
+    else if (macdBearish) winProb -= 8;
+    else if (macdLine < macdSignalLine) winProb -= 4;
+
+    // Category 4: Volume & Smart Money (OBV + Volume Trend) — single contribution
+    const volumeBullish = (obvDivergence === 'ACCUMULATION') || (volumeTrend === 'RISING_3D' && priceTrendSlope > 0);
+    const volumeBearish = (obvDivergence === 'DISTRIBUTION') || (volumeTrend === 'FALLING_3D' && priceTrendSlope > 0);
+    if (volumeBullish) winProb += 7;
+    else if (volumeBearish) winProb -= 7;
+    else if (volRatio >= 1.3 && priceTrendSlope > 0.3) winProb += 3;
+
+    // Category 5: Risk/Reward Structure — single contribution
+    if (riskRewardRatio >= 3) winProb += 6;
+    else if (riskRewardRatio >= 2) winProb += 4;
+    else if (riskRewardRatio >= 1.5) winProb += 2;
+    else if (riskRewardRatio < 1) winProb -= 6;
+
+    // Category 6: External Validation (TradingView + Divergence) — single contribution
+    const externalBullish = (tvData.rating === 'STRONG_BUY' || tvData.rating === 'BUY') && divergence !== 'BEARISH_BULL_TRAP';
+    const externalBearish = (tvData.rating === 'STRONG_SELL' || tvData.rating === 'SELL') || divergence === 'BEARISH_BULL_TRAP';
+    if (externalBullish && divergence === 'BULLISH_ACCUMULATION') winProb += 8;
+    else if (externalBullish) winProb += 5;
+    else if (externalBearish && divergence === 'BEARISH_BULL_TRAP') winProb -= 8;
+    else if (externalBearish) winProb -= 5;
+
+    // Category 7: Safety & Liquidity — single contribution (penalty only)
+    if (trapType !== 'NONE') winProb -= 8;
+    if (isIlliquidTrap) winProb -= 5;
+    // BB extreme zones as confirmation
+    if (bbPercentB < 0.10 && rsiTurningUp) winProb += 4;
+    else if (bbPercentB > 0.90 && rsiTurningDown) winProb -= 4;
 
     winProb = Math.max(5, Math.min(95, winProb));
 
@@ -1814,37 +1934,73 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       confidenceLevel: confidenceMultiplier >= 1.2 ? 'HIGH' : confidenceMultiplier >= 0.8 ? 'MEDIUM' : 'LOW',
     };
 
-    // ─── Strategy-Specific Dynamic Fit Scoring (Algoritma Presisi Multi-Strategi) ───
+    // ─── Fix #7: Strategy-Specific Dynamic Fit Scoring with Penalties ───
     let scalpScore = score;
+    // Scalping bonuses
     if (volRatio >= 1.5) scalpScore += 8; else if (volRatio >= 1.2) scalpScore += 4;
-    if (atrPercent >= 2.0) scalpScore += 6; else if (atrPercent < 1.0) scalpScore -= 10;
-    if (vwapDeviation > 0) scalpScore += 5;
+    if (atrPercent >= 2.0) scalpScore += 6;
+    if (vwapDeviation > 0 && vwapDeviation <= 2) scalpScore += 5;
     if (macdMomentum === 'ACCELERATING_BULL' || macdMomentum === 'ZERO_CROSS_BULL') scalpScore += 5;
+    if (volumeTrend === 'RISING_3D') scalpScore += 4;
+    // Scalping penalties
+    if (atrPercent < 1.0) scalpScore -= 12; // not volatile enough for scalping
+    if (volRatio < 0.8) scalpScore -= 8;    // below-average volume = no liquidity for scalp
+    if (isRanging && atrPercent < 1.5) scalpScore -= 5; // ranging + low ATR = dead stock
+    if (trapType !== 'NONE') scalpScore -= 10;
     scalpScore = Math.max(0, Math.min(100, Math.round(scalpScore)));
 
     let swingScore = score;
+    // Swing bonuses
     if (sma50 && sma200 && sma50 > sma200) swingScore += 10;
     if (adx >= 25) swingScore += 6; else if (adx >= 20) swingScore += 3;
     if (rsi >= 40 && rsi <= 65) swingScore += 6;
     if (bbPercentB >= 0.2 && bbPercentB <= 0.8) swingScore += 4;
+    if (volumeTrend === 'RISING_3D') swingScore += 4;
+    // Swing penalties
+    if (adx < 15) swingScore -= 8;        // no trend = swing trading fails
+    if (rsi > 70) swingScore -= 8;         // overbought entry for multi-day hold = risky
+    if (trapType === 'PUMP_DUMP') swingScore -= 15;
+    if (trapType === 'DEAD_CAT_BOUNCE') swingScore -= 12;
     swingScore = Math.max(0, Math.min(100, Math.round(swingScore)));
 
     let bsjpScore = score;
     const dayRange = (quoteResult.dayHigh - quoteResult.dayLow) || 1;
     const closeNearHigh = ((lastPrice - quoteResult.dayLow) / dayRange) >= 0.65;
+    // BSJP bonuses
     if (closeNearHigh) bsjpScore += 8;
     if (obvTrend === 'RISING' || obvDivergence === 'ACCUMULATION') bsjpScore += 8;
+    if (volumeTrend === 'RISING_3D') bsjpScore += 4;
+    // FIX #14: BSJP overnight gap risk filter
+    if (atrPercent > 4.5) bsjpScore -= 12; // high ATR% = likely gap-down overnight
+    if (rsi > 75) bsjpScore -= 8;          // overbought at close = gap-down risk
+    if (obvDivergence === 'DISTRIBUTION') bsjpScore -= 10; // smart money exiting
+    if (trapType === 'BULL_TRAP') bsjpScore -= 10;
+    if (!closeNearHigh && priceTrendSlope < 0) bsjpScore -= 6; // closed weak + downtrend
     bsjpScore = Math.max(0, Math.min(100, Math.round(bsjpScore)));
 
     let bpjsScore = score;
+    // BPJS bonuses
     if (priceTrendSlope > 0) bpjsScore += 6;
     if (volRatio >= 1.1) bpjsScore += 6;
     if (stochK > stochD && stochK < 80) bpjsScore += 5;
+    if (stochCrossover === 'BULLISH_CROSS') bpjsScore += 4;
+    // BPJS penalties
+    if (volRatio < 0.9) bpjsScore -= 6;   // low volume at open = weak momentum
+    if (rsi > 70) bpjsScore -= 6;          // overbought = limited upside during day
+    if (priceTrendSlope < -1) bpjsScore -= 8; // downtrend = bad for intraday buy
+    if (trapType !== 'NONE') bpjsScore -= 8;
     bpjsScore = Math.max(0, Math.min(100, Math.round(bpjsScore)));
 
     let bsijScore = score;
+    // BSIJ bonuses
     if (bbSqueeze || (adx > 22 && rsi >= 48)) bsijScore += 8;
     if (obvTrend === 'RISING') bsijScore += 5;
+    if (stochCrossover === 'BULLISH_CROSS' && stochK < 60) bsijScore += 4;
+    // BSIJ penalties
+    if (priceTrendSlope < -0.5) bsijScore -= 8; // session 2 continuation unlikely if downtrend
+    if (rsi > 72) bsijScore -= 6;          // overbought = limited upside in afternoon
+    if (volRatio < 0.8) bsijScore -= 6;    // low volume = no momentum to ride
+    if (trapType !== 'NONE') bsijScore -= 8;
     bsijScore = Math.max(0, Math.min(100, Math.round(bsijScore)));
 
     const strategyScores = { scalpScore, swingScore, bsjpScore, bpjsScore, bsijScore };
@@ -1876,10 +2032,13 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       macdHist: parseFloat(macdHist.toFixed(2)),
       stochK: parseFloat(stochK.toFixed(1)),
       stochD: parseFloat(stochD.toFixed(1)),
+      stochCrossover,          // New: %K/%D crossover state
       sma20,
       sma50,
       sma200,
+      ema10,                   // New: short-term EMA for alignment
       volRatio: parseFloat(volRatio.toFixed(2)),
+      volumeTrend,             // New: 3-day volume direction
       support: parseFloat(support.toFixed(0)),
       resistance: parseFloat(resistance.toFixed(0)),
       support1: parseFloat(support1.toFixed(0)),
@@ -1910,38 +2069,42 @@ async function analyzeStockForRecommendation(symbol, tvRatingsMap = null) {
       tvRecommendScore: tvData.score,
       isIlliquidTrap,
       dailyTurnover: Math.round(dailyTurnover),
+      trapType,                // New: anti-trap detection result
       strategyScores,
     };
   } catch (err) {
-    console.warn(`[Recommendation] Failed to analyze ${symbol}:`, err.message);
+    // Abaikan log peringatan 404 di console (normal terjadi pada beberapa saham yang belum terindeks/suspend di Yahoo Finance)
+    if (!err.message || !err.message.includes('404')) {
+      console.warn(`[Recommendation] Failed to analyze ${symbol}:`, err.message);
+    }
     return null;
   }
 }
 
-// Recommendation symbols (300+ Stocks across all 11 IDX Sectors)
+// Recommendation symbols (400+ Stocks across all 11 IDX Sectors, Including Popular Traders Favorites)
 const RECOMMENDATION_SYMBOLS = [
   // 🧪 BASIC-IND (Basic Materials)
-  'BRPT.JK', 'TPIA.JK', 'INKP.JK', 'TKIM.JK', 'ANTM.JK', 'INCO.JK', 'MDKA.JK', 'NCKL.JK', 'MBMA.JK', 'SMGR.JK', 'INTP.JK', 'AVIA.JK', 'TINS.JK', 'PSAB.JK', 'DKFT.JK', 'NIKL.JK', 'CITA.JK', 'SMCB.JK', 'SMBR.JK', 'ARCI.JK', 'IFSH.JK', 'MCOL.JK', 'SOLA.JK', 'AGII.JK', 'ALDO.JK', 'AMFG.JK', 'BTON.JK', 'FASW.JK', 'GDST.JK', 'INCF.JK', 'ISSP.JK', 'KRAS.JK', 'LION.JK', 'LMSH.JK', 'PBSA.JK', 'TDPM.JK', 'TRST.JK', 'UNIC.JK',
+  'BRPT.JK', 'TPIA.JK', 'INKP.JK', 'TKIM.JK', 'ANTM.JK', 'INCO.JK', 'MDKA.JK', 'NCKL.JK', 'MBMA.JK', 'SMGR.JK', 'INTP.JK', 'AVIA.JK', 'TINS.JK', 'PSAB.JK', 'DKFT.JK', 'NIKL.JK', 'CITA.JK', 'SMCB.JK', 'SMBR.JK', 'ARCI.JK', 'IFSH.JK', 'MCOL.JK', 'SOLA.JK', 'AGII.JK', 'ALDO.JK', 'AMFG.JK', 'BTON.JK', 'FASW.JK', 'GDST.JK', 'INCF.JK', 'ISSP.JK', 'KRAS.JK', 'LION.JK', 'LMSH.JK', 'PBSA.JK', 'TDPM.JK', 'TRST.JK', 'UNIC.JK', 'BRMS.JK', 'SMGA.JK', 'NICE.JK', 'HILL.JK', 'ZINC.JK', 'DAAZ.JK', 'CHEM.JK', 'PBID.JK', 'EKAD.JK', 'FPNI.JK', 'IGAR.JK',
   // 🔥 ENERGY
-  'ADRO.JK', 'PTBA.JK', 'PGAS.JK', 'MEDC.JK', 'AKRA.JK', 'ESSA.JK', 'AMMN.JK', 'BREN.JK', 'CUAN.JK', 'PGEO.JK', 'HRUM.JK', 'ITMG.JK', 'DOID.JK', 'INDY.JK', 'PTRO.JK', 'BYAN.JK', 'GEMS.JK', 'BUMI.JK', 'ELSA.JK', 'MBSS.JK', 'ENRG.JK', 'TOBA.JK', 'ABMM.JK', 'APEX.JK', 'ARTI.JK', 'BIPI.JK', 'BSSR.JK', 'DEWA.JK', 'FIRE.JK', 'GTBO.JK', 'IATA.JK', 'KOBX.JK', 'MYOH.JK', 'RUIS.JK', 'SMMT.JK', 'SURE.JK', 'TEBE.JK', 'WINS.JK',
+  'ADRO.JK', 'PTBA.JK', 'PGAS.JK', 'MEDC.JK', 'AKRA.JK', 'ESSA.JK', 'AMMN.JK', 'BREN.JK', 'CUAN.JK', 'PGEO.JK', 'HRUM.JK', 'ITMG.JK', 'DOID.JK', 'INDY.JK', 'PTRO.JK', 'BYAN.JK', 'GEMS.JK', 'BUMI.JK', 'ELSA.JK', 'MBSS.JK', 'ENRG.JK', 'TOBA.JK', 'ABMM.JK', 'APEX.JK', 'ARTI.JK', 'BIPI.JK', 'BSSR.JK', 'DEWA.JK', 'FIRE.JK', 'GTBO.JK', 'IATA.JK', 'KOBX.JK', 'MYOH.JK', 'RUIS.JK', 'SMMT.JK', 'SURE.JK', 'TEBE.JK', 'WINS.JK', 'DSSA.JK', 'ADMR.JK', 'AADI.JK', 'RAJA.JK', 'PSSI.JK', 'SGER.JK', 'HUMI.JK', 'GTRA.JK', 'KKGI.JK', 'BSML.JK', 'RGAS.JK',
   // 👕 CYCLICAL (Consumer Cyclicals)
-  'ACES.JK', 'MAPI.JK', 'MAPA.JK', 'ERAA.JK', 'RALS.JK', 'LPPF.JK', 'AUTO.JK', 'DRMA.JK', 'ASLC.JK', 'MPPA.JK', 'CINT.JK', 'WOOD.JK', 'PANR.JK', 'SCMA.JK', 'MNCN.JK', 'MSIN.JK', 'MDIA.JK', 'BELL.JK', 'BIKA.JK', 'BIPP.JK', 'BLTZ.JK', 'BOLA.JK', 'CSAP.JK', 'DFAM.JK', 'FAST.JK', 'FILM.JK', 'GLOB.JK', 'HERO.JK', 'KOCI.JK', 'MABA.JK',
+  'ACES.JK', 'MAPI.JK', 'MAPA.JK', 'ERAA.JK', 'RALS.JK', 'LPPF.JK', 'AUTO.JK', 'DRMA.JK', 'ASLC.JK', 'MPPA.JK', 'CINT.JK', 'WOOD.JK', 'PANR.JK', 'SCMA.JK', 'MNCN.JK', 'MSIN.JK', 'MDIA.JK', 'BELL.JK', 'BIKA.JK', 'BIPP.JK', 'BLTZ.JK', 'BOLA.JK', 'CSAP.JK', 'DFAM.JK', 'FAST.JK', 'FILM.JK', 'GLOB.JK', 'HERO.JK', 'KOCI.JK', 'MABA.JK', 'BMTR.JK', 'CARS.JK', 'IMAS.JK', 'IMJS.JK', 'MSKY.JK', 'ZONE.JK',
   // 🪙 FINANCE
-  'BBRI.JK', 'BBCA.JK', 'BMRI.JK', 'BBNI.JK', 'BRIS.JK', 'ARTO.JK', 'BBHI.JK', 'BNGA.JK', 'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'BTPS.JK', 'NISP.JK', 'PNLF.JK', 'BFIN.JK', 'SRTG.JK', 'BBTN.JK', 'AGRO.JK', 'BCIC.JK', 'BNLI.JK', 'BSIM.JK', 'MAHA.JK', 'MFIN.JK', 'CFIN.JK', 'AMAG.JK', 'BABP.JK', 'BACA.JK', 'BBKP.JK', 'BBMD.JK', 'BCAP.JK', 'BEKS.JK', 'BGTG.JK', 'BINA.JK', 'BNBA.JK', 'BNII.JK', 'BSWD.JK', 'BTPN.JK', 'DNAR.JK', 'MASB.JK',
+  'BBRI.JK', 'BBCA.JK', 'BMRI.JK', 'BBNI.JK', 'BRIS.JK', 'ARTO.JK', 'BBHI.JK', 'BNGA.JK', 'BDMN.JK', 'BJBR.JK', 'BJTM.JK', 'BTPS.JK', 'NISP.JK', 'PNLF.JK', 'BFIN.JK', 'SRTG.JK', 'BBTN.JK', 'AGRO.JK', 'BCIC.JK', 'BNLI.JK', 'BSIM.JK', 'MAHA.JK', 'MFIN.JK', 'CFIN.JK', 'AMAG.JK', 'BABP.JK', 'BACA.JK', 'BBKP.JK', 'BBMD.JK', 'BCAP.JK', 'BEKS.JK', 'BGTG.JK', 'BINA.JK', 'BNBA.JK', 'BNII.JK', 'BSWD.JK', 'BTPN.JK', 'DNAR.JK', 'MASB.JK', 'ADMF.JK', 'WOMF.JK', 'AMAR.JK', 'BBYB.JK', 'BANK.JK', 'TUGU.JK', 'PNBN.JK', 'PNIN.JK', 'MEGA.JK', 'NOBU.JK', 'MLPL.JK',
   // 🛣️ INFRASTRUC (Infrastructure)
-  'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK', 'FREN.JK', 'CENT.JK', 'GHON.JK', 'GOLD.JK', 'META.JK', 'CMNP.JK', 'KEEN.JK', 'POWR.JK', 'TGRA.JK', 'ACST.JK', 'BALI.JK', 'BPII.JK', 'BUKK.JK', 'DADA.JK', 'IBST.JK', 'IDPR.JK', 'KBLV.JK', 'LINK.JK', 'MCTA.JK', 'MTPS.JK', 'PPRE.JK', 'SSIA.JK', 'SUPR.JK', 'TLDN.JK',
+  'TLKM.JK', 'ISAT.JK', 'EXCL.JK', 'TOWR.JK', 'TBIG.JK', 'JSMR.JK', 'FREN.JK', 'CENT.JK', 'GHON.JK', 'GOLD.JK', 'META.JK', 'CMNP.JK', 'KEEN.JK', 'POWR.JK', 'TGRA.JK', 'ACST.JK', 'BALI.JK', 'BPII.JK', 'BUKK.JK', 'DADA.JK', 'IBST.JK', 'IDPR.JK', 'KBLV.JK', 'LINK.JK', 'MCTA.JK', 'MTPS.JK', 'PPRE.JK', 'SSIA.JK', 'SUPR.JK', 'TLDN.JK', 'MORI.JK', 'OASA.JK', 'KARW.JK', 'MTEL.JK',
   // 🏥 HEALTH (Healthcare)
-  'KLBF.JK', 'KAEF.JK', 'MIKA.JK', 'HEAL.JK', 'SILO.JK', 'SIDO.JK', 'INAF.JK', 'SAME.JK', 'PRDA.JK', 'TSPC.JK', 'PEHA.JK', 'DVLA.JK', 'PYFA.JK', 'BMHS.JK', 'CARE.JK', 'DGNS.JK', 'MEDS.JK', 'OMED.JK', 'PRAY.JK', 'PRIM.JK', 'RDTX.JK', 'SCPI.JK',
+  'KLBF.JK', 'KAEF.JK', 'MIKA.JK', 'HEAL.JK', 'SILO.JK', 'SIDO.JK', 'INAF.JK', 'SAME.JK', 'PRDA.JK', 'TSPC.JK', 'PEHA.JK', 'DVLA.JK', 'PYFA.JK', 'BMHS.JK', 'CARE.JK', 'DGNS.JK', 'MEDS.JK', 'OMED.JK', 'PRAY.JK', 'PRIM.JK', 'RDTX.JK', 'SCPI.JK', 'SOHO.JK', 'RSGK.JK', 'MTMH.JK', 'HALO.JK',
   // 🏭 INDUSTRIAL (Industrials)
-  'ASII.JK', 'UNTR.JK', 'HEXA.JK', 'PTPP.JK', 'WIKA.JK', 'ADHI.JK', 'WEGE.JK', 'TOTL.JK', 'MARK.JK', 'IMPC.JK', 'KBLI.JK', 'JECC.JK', 'ARNA.JK', 'BHIT.JK', 'CCSI.JK', 'GMFI.JK', 'INAI.JK', 'KBLM.JK', 'KMTR.JK', 'KPII.JK', 'SPTO.JK',
+  'ASII.JK', 'UNTR.JK', 'HEXA.JK', 'PTPP.JK', 'WIKA.JK', 'ADHI.JK', 'WEGE.JK', 'TOTL.JK', 'MARK.JK', 'IMPC.JK', 'KBLI.JK', 'JECC.JK', 'ARNA.JK', 'BHIT.JK', 'CCSI.JK', 'GMFI.JK', 'INAI.JK', 'KBLM.JK', 'KMTR.JK', 'KPII.JK', 'SPTO.JK', 'BNBR.JK', 'VKTR.JK', 'MLIA.JK', 'LABA.JK', 'HYGN.JK', 'SKRN.JK', 'JTPE.JK',
   // 🛒 NON-CYCLICAL (Consumer Non-Cyclicals)
-  'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'CPIN.JK', 'JPFA.JK', 'CMRY.JK', 'CLEO.JK', 'MYOR.JK', 'AMRT.JK', 'GGRM.JK', 'HMSP.JK', 'STTP.JK', 'AALI.JK', 'LSIP.JK', 'TAPG.JK', 'DSNG.JK', 'SSMS.JK', 'BWPT.JK', 'SIMP.JK', 'VICI.JK', 'MAIN.JK', 'BEEF.JK', 'BTEK.JK', 'CEKA.JK', 'DLTA.JK', 'DMND.JK', 'FOOD.JK', 'GOOD.JK', 'HOKI.JK', 'IKAN.JK', 'KEJU.JK',
+  'UNVR.JK', 'ICBP.JK', 'INDF.JK', 'CPIN.JK', 'JPFA.JK', 'CMRY.JK', 'CLEO.JK', 'MYOR.JK', 'AMRT.JK', 'GGRM.JK', 'HMSP.JK', 'STTP.JK', 'AALI.JK', 'LSIP.JK', 'TAPG.JK', 'DSNG.JK', 'SSMS.JK', 'BWPT.JK', 'SIMP.JK', 'VICI.JK', 'MAIN.JK', 'BEEF.JK', 'BTEK.JK', 'CEKA.JK', 'DLTA.JK', 'DMND.JK', 'FOOD.JK', 'GOOD.JK', 'HOKI.JK', 'IKAN.JK', 'KEJU.JK', 'BOBA.JK', 'STRK.JK', 'ROTI.JK', 'ULTJ.JK', 'ADES.JK', 'CAMP.JK', 'TBLA.JK',
   // 🏠 PROPERTY (Property & Real Estate)
-  'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'ASRI.JK', 'APLN.JK', 'DUTI.JK', 'MKPI.JK', 'DILD.JK', 'KIJA.JK', 'BEST.JK', 'LPKR.JK', 'LPCK.JK', 'PPRO.JK', 'JRPT.JK', 'BKSL.JK', 'ARMY.JK', 'BAPA.JK', 'BBSS.JK', 'BCIP.JK', 'CITY.JK', 'COWL.JK', 'CPRI.JK', 'DMAS.JK', 'ELTY.JK', 'FMII.JK', 'FORZ.JK', 'GAMA.JK', 'GPRA.JK', 'GWSA.JK', 'IPAC.JK',
+  'BSDE.JK', 'CTRA.JK', 'PWON.JK', 'SMRA.JK', 'ASRI.JK', 'APLN.JK', 'DUTI.JK', 'MKPI.JK', 'DILD.JK', 'KIJA.JK', 'BEST.JK', 'LPKR.JK', 'LPCK.JK', 'PPRO.JK', 'JRPT.JK', 'BKSL.JK', 'ARMY.JK', 'BAPA.JK', 'BBSS.JK', 'BCIP.JK', 'CITY.JK', 'COWL.JK', 'CPRI.JK', 'DMAS.JK', 'ELTY.JK', 'FMII.JK', 'FORZ.JK', 'GAMA.JK', 'GPRA.JK', 'GWSA.JK', 'IPAC.JK', 'PANI.JK', 'REAL.JK', 'SWID.JK', 'TRIN.JK', 'URBN.JK', 'VAST.JK',
   // ✈️ TRANSPORT (Transportation & Logistics)
-  'BIRD.JK', 'SMDR.JK', 'ASSA.JK', 'TMAS.JK', 'HELI.JK', 'HAIS.JK', 'GIAA.JK', 'CMPP.JK', 'IPCC.JK', 'IPCM.JK', 'SAFE.JK', 'BPTR.JK', 'TRUK.JK', 'WEHA.JK', 'AKSI.JK', 'BLTA.JK', 'CASS.JK', 'DEAL.JK', 'HITS.JK', 'JKSW.JK', 'LEAD.JK', 'LRNA.JK',
+  'BIRD.JK', 'SMDR.JK', 'ASSA.JK', 'TMAS.JK', 'HELI.JK', 'HAIS.JK', 'GIAA.JK', 'CMPP.JK', 'IPCC.JK', 'IPCM.JK', 'SAFE.JK', 'BPTR.JK', 'TRUK.JK', 'WEHA.JK', 'AKSI.JK', 'BLTA.JK', 'CASS.JK', 'DEAL.JK', 'HITS.JK', 'JKSW.JK', 'LEAD.JK', 'LRNA.JK', 'NELY.JK', 'SOCI.JK', 'KLAS.JK', 'PTMP.JK', 'PJAA.JK',
   // 💻 TECHNOLOGY
-  'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'MLPT.JK', 'DCII.JK', 'MTDL.JK', 'WIFI.JK', 'BELI.JK', 'AXIO.JK', 'MCAS.JK', 'NFCX.JK', 'DMMX.JK', 'ENVY.JK', 'ATIC.JK', 'CASH.JK', 'DIVA.JK', 'GLVA.JK', 'HDIT.JK', 'JSPT.JK', 'LUCK.JK', 'MTECH.JK', 'PTSN.JK', 'WIRE.JK'
+  'GOTO.JK', 'BUKA.JK', 'EMTK.JK', 'MLPT.JK', 'DCII.JK', 'MTDL.JK', 'WIFI.JK', 'BELI.JK', 'AXIO.JK', 'MCAS.JK', 'NFCX.JK', 'DMMX.JK', 'ENVY.JK', 'ATIC.JK', 'CASH.JK', 'DIVA.JK', 'GLVA.JK', 'HDIT.JK', 'JSPT.JK', 'LUCK.JK', 'MTECH.JK', 'PTSN.JK', 'WIRE.JK', 'AWAN.JK', 'ZYRX.JK', 'CYBR.JK', 'CHIP.JK', 'EDGE.JK', 'ELIT.JK', 'TECH.JK', 'TRON.JK', 'AREA.JK'
 ];
 
 // ─── TradingView Screener API Validation Engine ───
@@ -2053,8 +2216,15 @@ function optimizeTradeLevels(rawLow, rawHigh, rawSL, rawTP, minRRR = 1.5) {
   const entryMid = (entryLow + entryHigh) / 2 || entryHigh;
   let distSL = Math.abs(entryMid - stopLoss);
   
-  if (distSL <= 0) {
+  // Ensure SL is always at least 1 tick below entry (fixes edge case for very low-priced stocks)
+  if (distSL <= 0 || stopLoss >= entryLow) {
+    // Try 2% below first
     stopLoss = roundToIdxTick(entryLow * 0.98, 'sl');
+    // If still at or above entry (very low price stocks), force 1 tick below
+    if (stopLoss >= entryLow) {
+      const tick = entryLow < 200 ? 1 : entryLow < 500 ? 2 : entryLow < 2000 ? 5 : entryLow < 5000 ? 10 : 25;
+      stopLoss = Math.max(1, entryLow - tick);
+    }
     distSL = Math.abs(entryMid - stopLoss);
   }
 
@@ -2102,11 +2272,18 @@ app.get('/api/recommendations/today', async (req, res) => {
   try {
     const data = await withCache('recommendations:today_v3_perfect', 1800, async () => {
       const analyses = await getSharedBatchAnalyses();
-      const sorted = [...analyses].sort((a, b) => ((b.strategyScores?.scalpScore || b.score) * b.volRatio) - ((a.strategyScores?.scalpScore || a.score) * a.volRatio));
+      // FIX #5: Sort by strategy score primarily, use volRatio as tiebreaker (not multiplier)
+      const sorted = [...analyses].sort((a, b) => {
+        const scoreA = a.strategyScores?.scalpScore || a.score;
+        const scoreB = b.strategyScores?.scalpScore || b.score;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return b.volRatio - a.volRatio; // tiebreaker
+      });
 
-      const buyPicks = sorted.filter(a => (a.strategyScores?.scalpScore || a.score) >= 54 && !a.isIlliquidTrap).slice(0, 8);
+      // FIX #13: Raise minimum score threshold from 54 to 60, exclude trapped stocks
+      const buyPicks = sorted.filter(a => (a.strategyScores?.scalpScore || a.score) >= 60 && !a.isIlliquidTrap && a.trapType === 'NONE').slice(0, 8);
       const sellPicks = sorted.filter(a => a.score <= 35).slice(0, 4);
-      const holdPicks = sorted.filter(a => a.score > 35 && (a.strategyScores?.scalpScore || a.score) < 54).slice(0, 4);
+      const holdPicks = sorted.filter(a => a.score > 35 && (a.strategyScores?.scalpScore || a.score) < 60 && !a.isIlliquidTrap).slice(0, 4);
 
       let aiAnalysis = {};
       if (process.env.GEMINI_API_KEY && buyPicks.length > 0) {
@@ -2210,7 +2387,8 @@ app.get('/api/recommendations/tomorrow', async (req, res) => {
       const analyses = await getSharedBatchAnalyses();
       const sorted = [...analyses].sort((a, b) => (b.strategyScores?.scalpScore || b.score) - (a.strategyScores?.scalpScore || a.score));
 
-      const morningPicks = sorted.filter(a => (a.strategyScores?.scalpScore || a.score) >= 55 && !a.isIlliquidTrap).slice(0, 6);
+      // FIX #13: Raise threshold from 55 to 60, exclude trapped stocks
+      const morningPicks = sorted.filter(a => (a.strategyScores?.scalpScore || a.score) >= 60 && !a.isIlliquidTrap && a.trapType === 'NONE').slice(0, 6);
       const avoidPicks = sorted.filter(a => a.score <= 32).slice(0, 4);
 
       let aiAnalysis = {};
@@ -2303,7 +2481,8 @@ app.get('/api/recommendations/swing', async (req, res) => {
     const data = await withCache('recommendations:swing_v3_perfect', 1800, async () => {
       const analyses = await getSharedBatchAnalyses();
       const sorted = [...analyses].sort((a, b) => (b.strategyScores?.swingScore || b.score) - (a.strategyScores?.swingScore || a.score));
-      const candidates = sorted.filter(a => (a.strategyScores?.swingScore || a.score) >= 55 && !a.isIlliquidTrap);
+      // FIX #13: Raise threshold from 55 to 58, exclude trapped stocks
+      const candidates = sorted.filter(a => (a.strategyScores?.swingScore || a.score) >= 58 && !a.isIlliquidTrap && a.trapType === 'NONE');
 
       const nextTradingDate = getNextTradingDayLabel();
 
@@ -2366,12 +2545,13 @@ app.get('/api/recommendations/bsjp', async (req, res) => {
     const data = await withCache('recommendations:bsjp_v3_perfect', 1800, async () => {
       const analyses = await getSharedBatchAnalyses();
       const candidates = [...analyses]
-        .filter(a => (a.strategyScores?.bsjpScore || a.score) >= 52 && !a.isIlliquidTrap && (
+        // FIX #13: Raise threshold from 52 to 55, exclude trapped stocks
+        .filter(a => (a.strategyScores?.bsjpScore || a.score) >= 55 && !a.isIlliquidTrap && a.trapType === 'NONE' && (
           a.obvDivergence === 'ACCUMULATION' ||
           a.obvTrend === 'RISING' ||
           a.volRatio >= 1.2
         ) && a.priceTrendSlope > -1)
-        .sort((a, b) => ((b.strategyScores?.bsjpScore || b.score) * b.volRatio) - ((a.strategyScores?.bsjpScore || a.score) * a.volRatio));
+        .sort((a, b) => (b.strategyScores?.bsjpScore || b.score) - (a.strategyScores?.bsjpScore || a.score));
 
       const bsjpPicks = candidates.slice(0, 6).map(p => {
         const rawLow = p.support || Math.round(p.price * 0.99);
@@ -2426,7 +2606,8 @@ app.get('/api/recommendations/bpjs', async (req, res) => {
     const data = await withCache('recommendations:bpjs_v3_perfect', 1800, async () => {
       const analyses = await getSharedBatchAnalyses();
       const candidates = [...analyses]
-        .filter(a => (a.strategyScores?.bpjsScore || a.score) >= 52 && !a.isIlliquidTrap && a.volRatio >= 1.1 &&
+        // FIX #13: Raise threshold from 52 to 55, exclude trapped stocks
+        .filter(a => (a.strategyScores?.bpjsScore || a.score) >= 55 && !a.isIlliquidTrap && a.trapType === 'NONE' && a.volRatio >= 1.1 &&
           a.rsi >= 35 && a.rsi <= 65 &&
           a.priceTrendSlope > 0
         )
@@ -2486,12 +2667,13 @@ app.get('/api/recommendations/bsij', async (req, res) => {
     const data = await withCache('recommendations:bsij_v3_perfect', 1800, async () => {
       const analyses = await getSharedBatchAnalyses();
       const candidates = [...analyses]
-        .filter(a => (a.strategyScores?.bsijScore || a.score) >= 52 && !a.isIlliquidTrap && a.volRatio >= 1.1 && (
+        // FIX #13: Raise threshold from 52 to 55, exclude trapped stocks
+        .filter(a => (a.strategyScores?.bsijScore || a.score) >= 55 && !a.isIlliquidTrap && a.trapType === 'NONE' && a.volRatio >= 1.1 && (
           a.obvDivergence === 'ACCUMULATION' ||
           a.obvTrend === 'RISING' ||
           a.changePercent > 0
         ) && a.rsi >= 40 && a.rsi <= 70)
-        .sort((a, b) => ((b.strategyScores?.bsijScore || b.score) * b.volRatio) - ((a.strategyScores?.bsijScore || a.score) * a.volRatio));
+        .sort((a, b) => (b.strategyScores?.bsijScore || b.score) - (a.strategyScores?.bsijScore || a.score));
 
       const bsijPicks = candidates.slice(0, 6).map(p => {
         const rawLow = p.support || Math.round(p.price * 0.99);
@@ -2544,10 +2726,19 @@ app.get('/api/recommendations/bsij', async (req, res) => {
 function generateFallbackReasoning(stock) {
   const parts = [];
 
+  // 0. Anti-Trap Warning (highest priority)
+  if (stock.trapType === 'BULL_TRAP') {
+    parts.push('[PERINGATAN BULL TRAP]: Harga naik namun volume menurun 3 hari berturut — waspadai jebakan kenaikan palsu');
+  } else if (stock.trapType === 'PUMP_DUMP') {
+    parts.push('[PERINGATAN PUMP & DUMP]: Volume melonjak ekstrem disertai kenaikan harga tajam — risiko koreksi sangat tinggi');
+  } else if (stock.trapType === 'DEAD_CAT_BOUNCE') {
+    parts.push('[PERINGATAN DEAD CAT BOUNCE]: Pantulan kecil setelah penurunan tajam — bukan reversal genuine, risiko lanjut turun');
+  }
+
   // 1. Konsensus AI & Smart Money Flow
   if (stock.obvDivergence === 'ACCUMULATION') {
     parts.push('[Smart Money Verified]: Terdeteksi arus akumulasi institusi (OBV Divergence) di tengah harga yang terkonsolidasi');
-  } else if (stock.vwapDeviation !== undefined && stock.vwapDeviation > 0.5) {
+  } else if (stock.vwapDeviation !== undefined && stock.vwapDeviation > 0.3 && stock.vwapDeviation <= 2.0) {
     parts.push(`[Dominasi Buyer]: Harga kokoh bertengger di atas garis VWAP Institusi (+${stock.vwapDeviation}%), menandakan dorongan volume beli agresif`);
   } else if (stock.tradingViewRating && stock.tradingViewRating.includes('BUY')) {
     parts.push(`[Sinyal Konsensus]: Validasi teknikal multi-indikator mengonfirmasi status ${stock.tradingViewRating.replace(/_/g, ' ')}`);
@@ -2555,16 +2746,26 @@ function generateFallbackReasoning(stock) {
     parts.push('[Teknikal Konfirmasi]: Struktur harga berada dalam zona momentum dengan potensi pergerakan optimal');
   }
 
-  // 2. Momentum & Tren
+  // 2. Momentum & Tren (enhanced with EMA alignment and volume trend)
   const trendDesc = (stock.sma50 && stock.sma200 && stock.sma50 > stock.sma200) ? 'di dalam jalur uptrend major (Golden Cross Zone)' : 'dengan potensi rebound teknikal';
   if (stock.macdMomentum === 'ZERO_CROSS_BULL' || stock.macdMomentum === 'ACCELERATING_BULL') {
     parts.push(`Momentum MACD Histogram mengakselerasi kuat ${trendDesc}`);
+  } else if (stock.volRatio >= 1.3 && stock.volumeTrend === 'RISING_3D') {
+    parts.push(`Lonjakan volume 3 hari berturut hingga ${stock.volRatio}x rata-rata memperkuat validasi akumulasi genuine ${trendDesc}`);
   } else if (stock.volRatio >= 1.3) {
     parts.push(`Lonjakan volume transaksi hingga ${stock.volRatio}x rata-rata harian memperkuat validasi breakout ${trendDesc}`);
   } else if (stock.rsi >= 40 && stock.rsi <= 65) {
     parts.push(`RSI berada di level ideal (${stock.rsi}) untuk melanjutkan ekspansi harga tanpa tekanan overbought ${trendDesc}`);
   } else if (stock.rsi < 35) {
     parts.push(`Indikator RSI menyentuh zona oversold terdepresiasi (${stock.rsi}), membuka peluang pantulan reversal berisiko rendah`);
+  }
+
+  // 2b. Stochastic Crossover & EMA Alignment (new signals)
+  if (stock.stochCrossover === 'BULLISH_CROSS' && stock.stochK < 50) {
+    parts.push(`Sinyal Stochastic %K memotong ke atas %D dari zona oversold (K:${stock.stochK}/D:${stock.stochD}) — konfirmasi momentum pembalikan`);
+  }
+  if (stock.ema10 && stock.sma20 && stock.price > stock.ema10 && stock.ema10 > stock.sma20) {
+    parts.push('Struktur EMA tersusun rapi (Harga > EMA10 > SMA20), menandakan kekuatan tren jangka pendek terkonfirmasi');
   }
 
   // 3. Manajemen Risiko & Ekspektasi Cuan
